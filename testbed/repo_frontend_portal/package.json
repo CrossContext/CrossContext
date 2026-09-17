@@ -1,0 +1,13 @@
+{
+  "name": "repo_frontend_portal",
+  "version": "1.0.0",
+  "description": "Downstream consumer web app consuming backend auth APIs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
