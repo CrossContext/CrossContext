@@ -1,5 +1,7 @@
-"""Storage layer for OmniContext."""
+"""
+OmniContext Storage Engines (SQLite Edge Matrix & OpenSearch Serverless Adapter)
+"""
+from .sqlite_graph import SQLiteGraphStore
+from .opensearch_client import DualModeVectorStore
 
-from mcp_server.storage.sqlite_graph import SQLiteGraphStorage
-
-__all__ = ["SQLiteGraphStorage"]
+__all__ = ["SQLiteGraphStore", "DualModeVectorStore"]

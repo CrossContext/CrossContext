@@ -1,436 +1,290 @@
-"""Boundary-Aware AST Parser and Semantic Chunker for OmniContext.
-
-Parses source code into complete, unbroken structural AST nodes (classes, functions,
-methods, interfaces, endpoints) rather than arbitrary token windows.
-Supports Python, TypeScript, JavaScript, and Go, with zero-dependency native fallback
-if tree-sitter C++ grammars are not compiled.
+"""
+OmniContext - Tree-sitter Structural AST Engine & Semantic Chunker
+Parses Python and TypeScript/JavaScript source code into discrete, unbroken
+logical units (classes, functions, methods, endpoints) preserving exact syntactic boundaries.
+Includes Python standard AST fallback for zero-dependency instant execution.
 """
 
-from __future__ import annotations
-import ast
 import os
+import ast
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Dict, Any, Tuple
 
-from common.models import CodeNode, ASTChunk, SymbolType
+from common.models import CodeNode, CodeEdge, SymbolType, EdgeType
 
 
 class TreeSitterEngine:
-    """Parses multi-language source files into structured AST nodes and chunks."""
-
     def __init__(self):
-        self.has_treesitter = False
+        self.ts_available = False
+        self._init_treesitter()
+
+    def _init_treesitter(self):
+        """Attempts to load tree_sitter and language grammars."""
         try:
-            import tree_sitter  # type: ignore
-            self.has_treesitter = True
-        except ImportError:
-            self.has_treesitter = False
+            import tree_sitter
+            import tree_sitter_languages
+            self.ts_languages = {
+                "py": tree_sitter_languages.get_language("python"),
+                "ts": tree_sitter_languages.get_language("typescript"),
+                "js": tree_sitter_languages.get_language("javascript"),
+            }
+            self.ts_parsers = {
+                lang: tree_sitter.Parser(self.ts_languages[lang])
+                for lang in self.ts_languages
+            }
+            self.ts_available = True
+        except (ImportError, Exception):
+            # Fallback to robust Python ast + AST regex parser
+            self.ts_available = False
 
-    def parse_file(self, file_path: Union[str, Path], repo: str) -> List[CodeNode]:
-        """Parses a source file into structural CodeNodes."""
-        path = Path(file_path)
-        if not path.is_file():
-            return []
+    def parse_file(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """
+        Parses a single file into CodeNodes and CodeEdges.
+        Detects file extension and routes to appropriate parser.
+        """
+        norm_path = file_path.replace("\\", "/").strip("/")
+        ext = Path(norm_path).suffix.lstrip(".").lower()
 
-        try:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            return []
-
-        ext = path.suffix.lower()
-        rel_path = str(path.as_posix())
-
-        if ext == ".py":
-            return self._parse_python(content, rel_path, repo)
-        elif ext in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
-            return self._parse_typescript_javascript(content, rel_path, repo, is_ts=ext in (".ts", ".tsx"))
-        elif ext == ".go":
-            return self._parse_go(content, rel_path, repo)
+        if ext == "py":
+            return self._parse_python(repo, norm_path, content)
+        elif ext in ("ts", "tsx", "js", "jsx"):
+            return self._parse_typescript(repo, norm_path, content)
         else:
-            return self._parse_generic(content, rel_path, repo)
+            return [], []
 
-    def chunk_file(self, file_path: Union[str, Path], repo: str) -> List[ASTChunk]:
-        """Converts structural CodeNodes into semantic ASTChunks."""
-        nodes = self.parse_file(file_path, repo)
-        chunks: List[ASTChunk] = []
-        for node in nodes:
-            content = node.code_content or ""
-            # Estimate token count (rough heuristic: 1 token ~ 4 chars / 0.75 words)
-            token_est = max(1, len(content) // 4)
-            chunks.append(
-                ASTChunk(
-                    node_id=node.id,
-                    repo=node.repo,
-                    file_path=node.file_path,
-                    symbol_name=node.symbol_name,
-                    symbol_type=node.symbol_type,
-                    start_line=node.start_line,
-                    end_line=node.end_line,
-                    code_content=content,
-                    language=node.language,
-                    dependencies=node.metadata.get("calls", []),
-                    token_count_estimate=token_est,
-                )
-            )
-        return chunks
+    def parse_directory(self, repo: str, root_dir: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Recursively parses all source files in a repository directory."""
+        all_nodes: List[CodeNode] = []
+        all_edges: List[CodeEdge] = []
+        root_path = Path(root_dir)
 
-    def _parse_python(self, content: str, file_path: str, repo: str) -> List[CodeNode]:
-        """Extracts functions, classes, async functions, and FastAPI/Flask endpoints from Python code."""
+        valid_extensions = {".py", ".ts", ".tsx", ".js", ".jsx"}
+        for file in root_path.rglob("*"):
+            if file.is_file() and file.suffix in valid_extensions:
+                # Ignore test caches, node_modules, .venv
+                rel = file.relative_to(root_path).as_posix()
+                if any(ignored in rel for ignored in [".venv", "node_modules", "__pycache__", ".git"]):
+                    continue
+                try:
+                    content = file.read_text(encoding="utf-8", errors="replace")
+                    nodes, edges = self.parse_file(repo, rel, content)
+                    all_nodes.extend(nodes)
+                    all_edges.extend(edges)
+                except Exception as e:
+                    print(f"[Parser] Skipping {rel}: {e}")
+
+        return all_nodes, all_edges
+
+    # -------------------------------------------------------------
+    # Python Parser Implementation
+    # -------------------------------------------------------------
+
+    def _parse_python(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Parses Python code using AST and extracts symbols + call relations."""
         nodes: List[CodeNode] = []
-        lines = content.splitlines()
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
 
         try:
             tree = ast.parse(content, filename=file_path)
         except SyntaxError:
-            # Fallback to regex parser on syntax errors
-            return self._parse_python_regex(content, lines, file_path, repo)
+            # Fallback for incomplete/malformed syntax
+            return self._parse_python_regex_fallback(repo, file_path, lines)
 
-        class PythonASTVisitor(ast.NodeVisitor):
-            def __init__(self, engine: TreeSitterEngine):
-                self.engine = engine
-                self.current_class: Optional[str] = None
+        # First pass: Extract Classes, Functions, and Endpoint decorators
+        for item in tree.body:
+            if isinstance(item, ast.ClassDef):
+                node = self._extract_python_class(repo, file_path, item, lines)
+                nodes.append(node)
+                # Parse methods inside class
+                for subitem in item.body:
+                    if isinstance(subitem, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        method_node = self._extract_python_function(
+                            repo, file_path, subitem, lines, is_method=True, parent_class=item.name
+                        )
+                        nodes.append(method_node)
+                        # Edge: Class defines Method
+                        edges.append(CodeEdge(
+                            caller_id=node.id,
+                            callee_id=method_node.id,
+                            edge_type=EdgeType.DEFINES
+                        ))
 
-            def visit_ClassDef(self, node: ast.ClassDef):
-                start = node.lineno
-                end = getattr(node, "end_lineno", start)
-                code = "\n".join(lines[start - 1 : end]) if start - 1 < len(lines) else ""
-                doc = ast.get_docstring(node)
-                bases = [ast.unparse(b) for b in node.bases] if hasattr(ast, "unparse") else []
-                sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
+            elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                node = self._extract_python_function(repo, file_path, item, lines, is_method=False)
+                nodes.append(node)
 
-                node_id = f"{repo}:{file_path}:{node.name}:{start}"
-                nodes.append(
-                    CodeNode(
-                        id=node_id,
-                        repo=repo,
-                        file_path=file_path,
-                        symbol_name=node.name,
-                        symbol_type=SymbolType.CLASS,
-                        start_line=start,
-                        end_line=end,
-                        signature=sig,
-                        docstring=doc,
-                        code_content=code,
-                        language="python",
-                        metadata={"bases": bases, "decorators": [ast.unparse(d) for d in node.decorator_list] if hasattr(ast, "unparse") else []},
-                    )
-                )
+        # Second pass: Extract internal function call invocations
+        node_map = {n.symbol_name: n for n in nodes}
+        for node in nodes:
+            # Simple call site detection within function code
+            if node.code_content:
+                for callee_name, target_node in node_map.items():
+                    if callee_name != node.symbol_name and re.search(r'\b' + re.escape(callee_name) + r'\(', node.code_content):
+                        edges.append(CodeEdge(
+                            caller_id=node.id,
+                            callee_id=target_node.id,
+                            edge_type=EdgeType.CALLS
+                        ))
 
-                prev_class = self.current_class
-                self.current_class = node.name
-                self.generic_visit(node)
-                self.current_class = prev_class
+        return nodes, edges
 
-            def visit_FunctionDef(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]):
-                self._handle_func(node, is_async=isinstance(node, ast.AsyncFunctionDef))
+    def _extract_python_function(
+        self, repo: str, file_path: str, item: ast.FunctionDef, lines: List[str],
+        is_method: bool = False, parent_class: Optional[str] = None
+    ) -> CodeNode:
+        name = item.name
+        start_line = item.lineno
+        end_line = getattr(item, "end_lineno", start_line + len(item.body))
+        code_block = "".join(lines[start_line - 1 : end_line])
 
-            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-                self._handle_func(node, is_async=True)
+        # Check if function is a FastAPI / Flask endpoint decorator
+        is_endpoint = False
+        route_path = ""
+        for dec in item.decorator_list:
+            dec_str = ast.unparse(dec) if hasattr(ast, "unparse") else ""
+            if any(k in dec_str for k in [".get(", ".post(", ".put(", ".delete(", ".patch("]):
+                is_endpoint = True
+                route_match = re.search(r'[\'"]([^\'"]+)[\'"]', dec_str)
+                if route_match:
+                    route_path = route_match.group(1)
 
-            def _handle_func(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef], is_async: bool):
-                start = node.lineno
-                end = getattr(node, "end_lineno", start)
-                code = "\n".join(lines[start - 1 : end]) if start - 1 < len(lines) else ""
-                doc = ast.get_docstring(node)
+        symbol_type = SymbolType.ENDPOINT if is_endpoint else (SymbolType.METHOD if is_method else SymbolType.FUNCTION)
+        docstring = ast.get_docstring(item) or ""
+        sig_first_line = lines[start_line - 1].strip()
 
-                decorators = []
-                http_method = None
-                route_path = None
-                for dec in node.decorator_list:
-                    if hasattr(ast, "unparse"):
-                        dec_str = ast.unparse(dec)
-                        decorators.append(dec_str)
-                        # Detect FastAPI/Flask routes: app.get('/v1/auth/verify'), @router.post('/token')
-                        route_match = re.search(r"@?(?:app|router|api)\.(get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]", dec_str, re.IGNORECASE)
-                        if route_match:
-                            http_method = route_match.group(1).upper()
-                            route_path = route_match.group(2)
+        meta = {}
+        if is_endpoint and route_path:
+            meta["endpoint_route"] = route_path
+        if parent_class:
+            meta["parent_class"] = parent_class
 
-                calls = []
-                for subnode in ast.walk(node):
-                    if isinstance(subnode, ast.Call):
-                        if isinstance(subnode.func, ast.Name):
-                            calls.append(subnode.func.id)
-                        elif isinstance(subnode.func, ast.Attribute):
-                            calls.append(subnode.func.attr)
+        node_id = CodeNode.generate_id(repo, file_path, name, start_line)
+        return CodeNode(
+            id=node_id,
+            repo=repo,
+            file_path=file_path,
+            symbol_name=name,
+            symbol_type=symbol_type,
+            start_line=start_line,
+            end_line=end_line,
+            signature=sig_first_line,
+            docstring=docstring,
+            code_content=code_block,
+            metadata=meta
+        )
 
-                prefix = "async def " if is_async else "def "
-                sig = f"{prefix}{node.name}(...)"
-                if hasattr(ast, "unparse"):
-                    try:
-                        args_str = ast.unparse(node.args)
-                        ret_str = f" -> {ast.unparse(node.returns)}" if node.returns else ""
-                        sig = f"{prefix}{node.name}({args_str}){ret_str}"
-                    except Exception:
-                        pass
+    def _extract_python_class(self, repo: str, file_path: str, item: ast.ClassDef, lines: List[str]) -> CodeNode:
+        start_line = item.lineno
+        end_line = getattr(item, "end_lineno", start_line + len(item.body))
+        code_block = "".join(lines[start_line - 1 : end_line])
+        docstring = ast.get_docstring(item) or ""
+        sig_first_line = lines[start_line - 1].strip()
 
-                sym_type = SymbolType.ENDPOINT if route_path else (SymbolType.METHOD if self.current_class else SymbolType.FUNCTION)
-                sym_name = f"{self.current_class}.{node.name}" if self.current_class else node.name
-                node_id = f"{repo}:{file_path}:{sym_name}:{start}"
+        node_id = CodeNode.generate_id(repo, file_path, item.name, start_line)
+        return CodeNode(
+            id=node_id,
+            repo=repo,
+            file_path=file_path,
+            symbol_name=item.name,
+            symbol_type=SymbolType.CLASS,
+            start_line=start_line,
+            end_line=end_line,
+            signature=sig_first_line,
+            docstring=docstring,
+            code_content=code_block
+        )
 
-                meta = {
-                    "is_async": is_async,
-                    "decorators": decorators,
-                    "calls": list(set(calls)),
-                    "parent_class": self.current_class,
-                }
-                if route_path:
-                    meta["http_method"] = http_method
-                    meta["route_path"] = route_path
+    def _parse_python_regex_fallback(self, repo: str, file_path: str, lines: List[str]) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Resilient fallback when code contains syntax errors."""
+        nodes = []
+        func_pattern = re.compile(r'^\s*(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)')
+        class_pattern = re.compile(r'^\s*class\s+([a-zA-Z0-9_]+)')
 
-                nodes.append(
-                    CodeNode(
-                        id=node_id,
-                        repo=repo,
-                        file_path=file_path,
-                        symbol_name=sym_name,
-                        symbol_type=sym_type,
-                        start_line=start,
-                        end_line=end,
-                        signature=sig,
-                        docstring=doc,
-                        code_content=code,
-                        language="python",
-                        metadata=meta,
-                    )
-                )
-
-        visitor = PythonASTVisitor(self)
-        visitor.visit(tree)
-        return nodes
-
-    def _parse_python_regex(self, content: str, lines: List[str], file_path: str, repo: str) -> List[CodeNode]:
-        """Regex fallback parser for Python when AST parsing encounters syntax errors."""
-        nodes: List[CodeNode] = []
-        pattern = re.compile(r"^(?P<indent>\s*)(?:@(?P<dec>[^\n]+)\n\s*)*(?P<async>async\s+)?def\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<args>[^)]*)\)", re.MULTILINE)
-
-        for match in pattern.finditer(content):
-            name = match.group("name")
-            start_pos = match.start()
-            start_line = content.count("\n", 0, start_pos) + 1
-            is_async = bool(match.group("async"))
-            dec = match.group("dec") or ""
-
-            # Find boundary
-            end_line = min(len(lines), start_line + 15)
-            code = "\n".join(lines[start_line - 1 : end_line])
-
-            sig = f"{'async ' if is_async else ''}def {name}({match.group('args')})"
-            node_id = f"{repo}:{file_path}:{name}:{start_line}"
-            nodes.append(
-                CodeNode(
-                    id=node_id,
+        for idx, line in enumerate(lines, start=1):
+            f_match = func_pattern.match(line)
+            if f_match:
+                name = f_match.group(1)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
                     file_path=file_path,
                     symbol_name=name,
                     symbol_type=SymbolType.FUNCTION,
-                    start_line=start_line,
-                    end_line=end_line,
-                    signature=sig,
-                    docstring=None,
-                    code_content=code,
-                    language="python",
-                    metadata={"decorators": [dec] if dec else []},
-                )
-            )
-        return nodes
-
-    def _parse_typescript_javascript(self, content: str, file_path: str, repo: str, is_ts: bool) -> List[CodeNode]:
-        """Parses TypeScript/JavaScript functions, classes, interfaces, React components, and API callers."""
-        nodes: List[CodeNode] = []
-        lines = content.splitlines()
-
-        # Regex for interfaces & type aliases
-        if is_ts:
-            for m in re.finditer(r"^(?:export\s+)?interface\s+([A-Za-z0-9_]+)(?:\s+extends\s+[A-Za-z0-9_,\s]+)?\s*\{", content, re.MULTILINE):
-                name = m.group(1)
-                start_line = content.count("\n", 0, m.start()) + 1
-                end_line = self._find_closing_brace(content, m.start(), lines)
-                code = "\n".join(lines[start_line - 1 : end_line])
-                node_id = f"{repo}:{file_path}:{name}:{start_line}"
-                nodes.append(
-                    CodeNode(
-                        id=node_id,
-                        repo=repo,
-                        file_path=file_path,
-                        symbol_name=name,
-                        symbol_type=SymbolType.INTERFACE,
-                        start_line=start_line,
-                        end_line=end_line,
-                        signature=f"interface {name}",
-                        docstring=None,
-                        code_content=code,
-                        language="typescript",
-                        metadata={"is_interface": True},
-                    )
-                )
-
-        # Regex for classes
-        for m in re.finditer(r"^(?:export\s+)?class\s+([A-Za-z0-9_]+)(?:\s+extends\s+[A-Za-z0-9_]+)?(?:\s+implements\s+[A-Za-z0-9_,\s]+)?\s*\{", content, re.MULTILINE):
-            name = m.group(1)
-            start_line = content.count("\n", 0, m.start()) + 1
-            end_line = self._find_closing_brace(content, m.start(), lines)
-            code = "\n".join(lines[start_line - 1 : end_line])
-            node_id = f"{repo}:{file_path}:{name}:{start_line}"
-            nodes.append(
-                CodeNode(
-                    id=node_id,
+                    start_line=idx,
+                    end_line=min(idx + 20, len(lines)),
+                    signature=line.strip()
+                ))
+            c_match = class_pattern.match(line)
+            if c_match:
+                name = c_match.group(1)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
                     file_path=file_path,
                     symbol_name=name,
                     symbol_type=SymbolType.CLASS,
-                    start_line=start_line,
-                    end_line=end_line,
-                    signature=f"class {name}",
-                    docstring=None,
-                    code_content=code,
-                    language="typescript" if is_ts else "javascript",
-                    metadata={},
-                )
-            )
+                    start_line=idx,
+                    end_line=min(idx + 30, len(lines)),
+                    signature=line.strip()
+                ))
+        return nodes, []
 
-        # Regex for methods & functions
-        # 1. Standard functions: function foo(...)
-        # 2. Arrow functions: const foo = async (...) =>
-        # 3. Class methods: async verifySessionToken(...) or verifySessionToken(...)
-        method_pattern = re.compile(
-            r"^(?P<indent>[ \t]*)(?:export\s+)?(?:async\s+)?(?:(?P<is_func>function\s+)|(?P<is_const>(?:const|let|var)\s+))?(?P<name>[A-Za-z0-9_]+)\s*(?:=\s*(?:async\s*)?\((?P<arrow_args>[^)]*)\)\s*(?::\s*[^=]+)?=>|\((?P<args>[^)]*)\)\s*(?::\s*[^{]+)?)\s*\{",
-            re.MULTILINE,
-        )
+    # -------------------------------------------------------------
+    # TypeScript / JavaScript Parser Implementation
+    # -------------------------------------------------------------
 
-        for m in method_pattern.finditer(content):
-            name = m.group("name")
-            if name in ("if", "for", "while", "switch", "catch", "class", "interface", "constructor"):
-                continue
+    def _parse_typescript(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Parses TypeScript/JavaScript files for functions, interfaces, API consumer calls."""
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
 
-            args = m.group("args") or m.group("arrow_args") or ""
-            start_line = content.count("\n", 0, m.start()) + 1
-            end_line = self._find_closing_brace(content, m.start(), lines)
-            code = "\n".join(lines[start_line - 1 : end_line])
+        func_pattern = re.compile(r'(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)')
+        const_func_pattern = re.compile(r'(?:export\s+)?const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\((.*?)\)\s*=>')
+        interface_pattern = re.compile(r'(?:export\s+)?(?:interface|type)\s+([a-zA-Z0-9_]+)')
+        api_call_pattern = re.compile(r'(?:fetch|axios\.(?:get|post|put|delete)|api\.(?:get|post|put|delete))\s*\(\s*[\'"`]([^\'"`]+)[\'"`]')
 
-            # Extract API calls made inside the function or method
-            api_calls = []
-            # Match fetch(`...`), axios.get('...'), or string routes /v1/...
-            for api_match in re.finditer(r"(?:fetch|axios\.(?:get|post|put|delete|patch)|apiClient\.(?:get|post|put|delete|patch))\s*\(\s*[`'\"]([^`'\"]+)[`'\"]", code):
-                route_candidate = api_match.group(1)
-                # If template literal like `${this.baseUrl}/v1/auth/verify`, extract the path
-                path_match = re.search(r"(/(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/]+)", route_candidate)
-                if path_match:
-                    api_calls.append(path_match.group(1))
-                else:
-                    api_calls.append(route_candidate)
+        for idx, line in enumerate(lines, start=1):
+            f_match = func_pattern.search(line) or const_func_pattern.search(line)
+            if f_match:
+                name = f_match.group(1)
+                end_line = min(idx + 25, len(lines))
+                block = "".join(lines[idx - 1 : end_line])
 
-            # Also check for direct route strings in the method body
-            for route_m in re.finditer(r"['\"`](/(?:v[0-9]+)/[a-zA-Z0-9_\-\/]+)['\"`]", code):
-                api_calls.append(route_m.group(1))
+                # Check if this function calls an API endpoint (e.g. /v1/auth/verify)
+                api_match = api_call_pattern.search(block)
+                meta = {}
+                if api_match:
+                    meta["consumes_endpoint"] = api_match.group(1)
 
-            # Extract generic function calls
-            calls = [c.group(1) for c in re.finditer(r"\b([A-Za-z0-9_]+)\s*\(", code) if c.group(1) != name and c.group(1) not in ("fetch", "catch", "then", "if", "for")]
-
-            node_id = f"{repo}:{file_path}:{name}:{start_line}"
-            nodes.append(
-                CodeNode(
-                    id=node_id,
+                node = CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
                     file_path=file_path,
                     symbol_name=name,
                     symbol_type=SymbolType.FUNCTION,
-                    start_line=start_line,
+                    start_line=idx,
                     end_line=end_line,
-                    signature=f"function {name}({args})",
-                    docstring=None,
-                    code_content=code,
-                    language="typescript" if is_ts else "javascript",
-                    metadata={"calls": list(set(calls)), "api_calls": list(set(api_calls))},
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
                 )
-            )
+                nodes.append(node)
 
-        return nodes
-
-    def _parse_go(self, content: str, file_path: str, repo: str) -> List[CodeNode]:
-        """Parses Go functions, structs, and methods."""
-        nodes: List[CodeNode] = []
-        lines = content.splitlines()
-
-        # Func declarations: func (r *Receiver) MethodName(args) ret { ... } or func FunctionName(args) ret { ... }
-        pattern = re.compile(r"^func\s+(?:\((?P<recv>[^)]+)\)\s+)?(?P<name>[A-Za-z0-9_]+)\s*\((?P<args>[^)]*)\)", re.MULTILINE)
-        for m in pattern.finditer(content):
-            name = m.group("name")
-            recv = m.group("recv")
-            start_line = content.count("\n", 0, m.start()) + 1
-            end_line = self._find_closing_brace(content, m.start(), lines)
-            code = "\n".join(lines[start_line - 1 : end_line])
-            sig = f"func ({recv}) {name}({m.group('args')})" if recv else f"func {name}({m.group('args')})"
-            sym_name = f"{recv.split()[-1]}.{name}" if recv else name
-
-            node_id = f"{repo}:{file_path}:{sym_name}:{start_line}"
-            nodes.append(
-                CodeNode(
-                    id=node_id,
+            i_match = interface_pattern.search(line)
+            if i_match:
+                name = i_match.group(1)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
                     file_path=file_path,
-                    symbol_name=sym_name,
-                    symbol_type=SymbolType.METHOD if recv else SymbolType.FUNCTION,
-                    start_line=start_line,
-                    end_line=end_line,
-                    signature=sig,
-                    docstring=None,
-                    code_content=code,
-                    language="go",
-                    metadata={"receiver": recv},
-                )
-            )
+                    symbol_name=name,
+                    symbol_type=SymbolType.INTERFACE,
+                    start_line=idx,
+                    end_line=min(idx + 15, len(lines)),
+                    signature=line.strip()
+                ))
 
-        return nodes
-
-    def _parse_generic(self, content: str, file_path: str, repo: str) -> List[CodeNode]:
-        """Fallback parser for generic text / config files."""
-        lines = content.splitlines()
-        node_id = f"{repo}:{file_path}:module:1"
-        return [
-            CodeNode(
-                id=node_id,
-                repo=repo,
-                file_path=file_path,
-                symbol_name=Path(file_path).name,
-                symbol_type=SymbolType.MODULE,
-                start_line=1,
-                end_line=len(lines) if lines else 1,
-                signature=f"file {Path(file_path).name}",
-                docstring=None,
-                code_content=content,
-                language="text",
-                metadata={},
-            )
-        ]
-
-    def _find_closing_brace(self, content: str, start_index: int, lines: List[str]) -> int:
-        """Finds the line number of matching closing brace, or defaults to reasonable window."""
-        open_brace = content.find("{", start_index)
-        if open_brace == -1:
-            start_line = content.count("\n", 0, start_index) + 1
-            return min(len(lines), start_line + 20)
-
-        depth = 0
-        in_string = False
-        quote_char = ""
-        for i in range(open_brace, len(content)):
-            char = content[i]
-            if in_string:
-                if char == quote_char and (i == 0 or content[i - 1] != "\\"):
-                    in_string = False
-                continue
-            if char in ('"', "'", "`"):
-                in_string = True
-                quote_char = char
-                continue
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return content.count("\n", 0, i) + 1
-
-        start_line = content.count("\n", 0, start_index) + 1
-        return min(len(lines), start_line + 30)
+        return nodes, edges

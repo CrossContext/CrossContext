@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  omnicontext-agent:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: omnicontext-agentcore
+    environment:
+      - ENV=local
+      - SQLITE_DB_PATH=/app/data/omnicontext_graph.db
+      - AWS_REGION=us-east-1
+    volumes:
+      - ../data:/app/data
+      - ../testbed:/app/testbed
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  omnicontext-ui:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: omnicontext-dashboard
+    command: ["streamlit", "run", "ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      - ENV=local
+      - SQLITE_DB_PATH=/app/data/omnicontext_graph.db
+    volumes:
+      - ../data:/app/data
+    ports:
+      - "8501:8501"
+    depends_on:
+      - omnicontext-agent

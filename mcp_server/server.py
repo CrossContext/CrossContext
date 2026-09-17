@@ -1,156 +1,99 @@
-"""OmniContext Model Context Protocol (MCP) Server.
-
-Exposes deterministic code graph navigation, boundary-aware AST retrieval,
-and cross-repository blast-radius analysis over the standard MCP JSON-RPC protocol.
+"""
+OmniContext - Model Context Protocol (MCP) Server
+Standardized JSON-RPC Gatekeeper decoupling multi-repo code state from agent reasoning.
+Run with:
+    python -m mcp_server.server
 """
 
-from __future__ import annotations
-import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Optional, Dict, Any
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from mcp.server.fastmcp import FastMCP
-
-from mcp_server.parsers.scip_indexer import SCIPIndexer
-from mcp_server.storage.sqlite_graph import SQLiteGraphStorage
-from mcp_server.tools import CodeGraphTools
+from mcp_server.tools import CodeGraphToolManager
 
 # Initialize FastMCP Server
-mcp = FastMCP("OmniContext CodeGraph")
-
-# Shared storage and tools instance
-DB_PATH = os.environ.get("OMNICONTEXT_DB_PATH", "omnicontext_graph.db")
-storage = SQLiteGraphStorage(db_path=DB_PATH)
-tools_engine = CodeGraphTools(storage=storage)
-indexer = SCIPIndexer(storage=storage)
-
-
-def auto_index_testbed_if_empty():
-    """Auto-indexes the reference testbed repositories if the graph is currently unpopulated."""
-    nodes = storage.get_all_nodes()
-    if not nodes:
-        root_dir = Path(__file__).resolve().parent.parent
-        testbed_dir = root_dir / "testbed"
-        if testbed_dir.is_dir():
-            repos = {
-                "repo_auth_core": str(testbed_dir / "repo_auth_core"),
-                "repo_frontend_portal": str(testbed_dir / "repo_frontend_portal"),
-                "repo_shared_sdk": str(testbed_dir / "repo_shared_sdk"),
-            }
-            existing_repos = {k: v for k, v in repos.items() if Path(v).is_dir()}
-            if existing_repos:
-                indexer.index_multi_repos(existing_repos)
-
-
-# Run auto-indexing on module load
-auto_index_testbed_if_empty()
+mcp = FastMCP("OmniContext-CodeGraph-Server")
+manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
 
 
 @mcp.tool()
-def find_symbol_definition(symbol_name: str, repo: Optional[str] = None) -> str:
-    """Finds the precise definition, file path, line bounds, and AST content of a symbol.
-
-    Args:
-        symbol_name: Name of the function, class, endpoint, or variable.
-        repo: Optional repository filter (e.g. 'repo_auth_core').
+def get_symbol_definition(symbol_name: str, repo: Optional[str] = None) -> Dict[str, Any]:
     """
-    res = tools_engine.find_symbol_definition(symbol_name, repo)
-    return json.dumps(res, indent=2)
+    Locates the exact definition, line numbers, and signature of a symbol across repositories.
+    Args:
+        symbol_name: Name of function, class, or endpoint (e.g., 'verify_legacy_auth')
+        repo: Optional repository filter (e.g., 'repo_auth_core')
+    """
+    return manager.get_symbol_definition(symbol_name, repo)
 
 
 @mcp.tool()
-def get_usage_dependency_links(symbol_id: str) -> str:
-    """Finds all direct callers, consumers, and downstream dependencies across repositories.
-
-    Args:
-        symbol_id: Unique symbol ID or symbol name.
+def get_usage_dependency_links(symbol_name_or_id: str) -> Dict[str, Any]:
     """
-    res = tools_engine.get_usage_dependency_links(symbol_id)
-    return json.dumps(res, indent=2)
+    Traces cross-repository caller and callee links. Identifies which services
+    depend on or consume this symbol.
+    Args:
+        symbol_name_or_id: Symbol name or unique node ID
+    """
+    return manager.get_usage_dependency_links(symbol_name_or_id)
 
 
 @mcp.tool()
-def traverse_call_graph(
-    entry_symbol: str, depth: int = 2, direction: str = "both", repo: Optional[str] = None
-) -> str:
-    """Traces the multi-hop caller/callee dependency graph starting from an entry symbol.
-
-    Args:
-        entry_symbol: Function, class, or endpoint to start traversal from.
-        depth: Maximum traversal hops (default 2).
-        direction: 'downstream' (callers), 'upstream' (callees), or 'both'.
-        repo: Optional repository filter for entry point.
+def traverse_call_graph(root_symbol: str, max_depth: int = 3) -> Dict[str, Any]:
     """
-    res = tools_engine.traverse_call_graph(entry_symbol, depth=depth, direction=direction, repo=repo)
-    return json.dumps(res, indent=2)
+    Computes the blast radius of modifying or deprecating an API or symbol.
+    Returns upstream consumers and downstream dependencies spanning all repositories.
+    Args:
+        root_symbol: Starting symbol name (e.g., 'verify_legacy_auth')
+        max_depth: Maximum recursion hops (default: 3)
+    """
+    return manager.traverse_call_graph(root_symbol, depth=max_depth)
 
 
 @mcp.tool()
-def get_ast_chunk(
-    file_path: str, start_line: int, end_line: int, repo: Optional[str] = None
-) -> str:
-    """Retrieves exact, unbroken structural code chunk between specified line bounds.
-
-    Args:
-        file_path: Relative or absolute path to the file.
-        start_line: 1-indexed starting line.
-        end_line: 1-indexed ending line.
-        repo: Optional repository identifier.
+def get_ast_chunk(node_id: str) -> Dict[str, Any]:
     """
-    res = tools_engine.get_ast_chunk(file_path, start_line=start_line, end_line=end_line, repo=repo)
-    return json.dumps(res, indent=2)
+    Retrieves the complete unbroken AST code chunk for a symbol.
+    Args:
+        node_id: Deterministic node ID (e.g., 'repo_auth_core:src/api/auth.py:verify_legacy_auth:24')
+    """
+    return manager.get_ast_chunk(node_id)
 
 
 @mcp.tool()
-def semantic_code_search(query: str, repo: Optional[str] = None, limit: int = 10) -> str:
-    """Performs full-text & semantic keyword search across code symbols, signatures, and docstrings.
-
-    Args:
-        query: Search query (symbol name, concept, route).
-        repo: Optional repository filter.
-        limit: Max results to return.
+def semantic_code_search(query: str, repo: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
     """
-    res = tools_engine.semantic_code_search(query, repo=repo, limit=limit)
-    return json.dumps(res, indent=2)
+    Searches codebases using natural language intent via dense vector embeddings.
+    Args:
+        query: Conceptual search query (e.g., 'JWT token verification')
+        repo: Optional repository filter
+        limit: Number of results (default: 5)
+    """
+    return manager.semantic_code_search(query, repo=repo, limit=limit)
 
 
 @mcp.tool()
-def blast_radius_analysis(entry_symbol: str, repo: Optional[str] = None) -> str:
-    """Analyzes full downstream blast radius of modifying, renaming, or deprecating a symbol.
-
-    Args:
-        entry_symbol: Symbol or endpoint being modified (e.g. 'verify_auth_v1' or '/v1/auth/verify').
-        repo: Optional source repository.
+def index_local_repositories(repo_paths: Dict[str, str]) -> Dict[str, Any]:
     """
-    res = tools_engine.blast_radius_analysis(entry_symbol, repo=repo)
-    return json.dumps(res, indent=2)
+    Indexes directories into the semantic graph and vector store.
+    Args:
+        repo_paths: Map of repo name to absolute/relative directory path
+    """
+    return manager.index_repositories(repo_paths)
 
 
 @mcp.tool()
-def index_codebases(repo_paths_json: Optional[str] = None) -> str:
-    """Re-indexes codebases from provided repo mapping JSON string or default testbed.
-
-    Args:
-        repo_paths_json: Optional JSON string of {repo_name: path}.
-    """
-    storage.clear_all()
-    if repo_paths_json:
-        repo_dict = json.loads(repo_paths_json)
-    else:
-        root_dir = Path(__file__).resolve().parent.parent
-        testbed_dir = root_dir / "testbed"
-        repo_dict = {
-            "repo_auth_core": str(testbed_dir / "repo_auth_core"),
-            "repo_frontend_portal": str(testbed_dir / "repo_frontend_portal"),
-            "repo_shared_sdk": str(testbed_dir / "repo_shared_sdk"),
-        }
-    stats = indexer.index_multi_repos(repo_dict)
-    return json.dumps({"status": "indexed", "statistics": stats}, indent=2)
+def get_graph_diagnostics() -> Dict[str, Any]:
+    """Returns database and vector store diagnostics."""
+    return manager.get_system_stats()
 
 
 if __name__ == "__main__":
-    # If run directly as a script, start stdio transport
-    print("[OmniContext MCP Server] Starting FastMCP Server on stdio...", file=sys.stderr)
-    mcp.run()
+    # If run directly as a script, default to stdio transport for IDE/Agent integration
+    mcp.run(transport="stdio")

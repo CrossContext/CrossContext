@@ -1,42 +1,58 @@
-"""SQLite Relational Edge Matrix and FTS5 Graph Storage for OmniContext.
-
-Provides persistent, deterministic graph traversals and full-text code search
-without external database dependencies.
+"""
+OmniContext - SQLite Relational Graph Store
+Maintains the deterministic directional edge matrix (callers, callees, imports, API consumers)
+and provides sub-millisecond lexical FTS5 searching across multi-repository symbols.
 """
 
-from __future__ import annotations
+import os
 import json
 import sqlite3
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Dict, Any, Set
+
 from common.models import (
     CodeNode,
     CodeEdge,
     SymbolType,
     EdgeType,
-    TraversalResult,
-    BlastRadiusReport,
+    TraversalResult
 )
 
 
-class SQLiteGraphStorage:
-    """Manages SQLite storage for AST nodes, cross-repo edges, and FTS5 full-text search."""
+class SQLiteGraphStore:
+    def __init__(self, db_path: Optional[str] = None):
+        """
+        Initializes the SQLite Graph Store.
+        If db_path is None or ':memory:', runs an in-memory database (great for tests).
+        """
+        self._mem_conn = None
+        if db_path and db_path != ":memory:":
+            self.db_path = Path(db_path)
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.connection_str = str(self.db_path)
+        else:
+            self.connection_str = ":memory:"
+            # Retain open connection for in-memory database so tables persist
+            self._mem_conn = sqlite3.connect(":memory:")
+            self._mem_conn.row_factory = sqlite3.Row
 
-    def __init__(self, db_path: str = "omnicontext_graph.db"):
-        self.db_path = str(Path(db_path).resolve())
-        self._init_db()
+        self._init_schema()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        if self._mem_conn is not None:
+            return self._mem_conn
+        conn = sqlite3.connect(self.connection_str)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
         return conn
 
-    def _init_db(self):
+    def _init_schema(self):
+        """Creates the relational graph tables, indexes, and FTS5 full-text engine."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executescript("""
+            # 1. Nodes table
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS nodes (
                     id TEXT PRIMARY KEY,
                     repo TEXT NOT NULL,
@@ -48,110 +64,138 @@ class SQLiteGraphStorage:
                     signature TEXT,
                     docstring TEXT,
                     code_content TEXT,
-                    language TEXT NOT NULL,
                     metadata_json TEXT
                 );
+            """)
 
+            # 2. Edges table (Directional relationship: caller -> callee)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS edges (
-                    id TEXT PRIMARY KEY,
                     caller_id TEXT NOT NULL,
                     callee_id TEXT NOT NULL,
                     edge_type TEXT NOT NULL,
-                    caller_repo TEXT,
-                    callee_repo TEXT,
-                    context_line INTEGER,
-                    call_snippet TEXT,
-                    metadata_json TEXT
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_nodes_symbol ON nodes(symbol_name);
-                CREATE INDEX IF NOT EXISTS idx_nodes_repo ON nodes(repo);
-                CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);
-                CREATE INDEX IF NOT EXISTS idx_edges_caller ON edges(caller_id);
-                CREATE INDEX IF NOT EXISTS idx_edges_callee ON edges(callee_id);
-                CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(edge_type);
-
-                CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
-                    id UNINDEXED,
-                    symbol_name,
-                    signature,
-                    docstring,
-                    code_content,
-                    tokenize='porter unicode61'
+                    confidence REAL DEFAULT 1.0,
+                    metadata_json TEXT,
+                    PRIMARY KEY (caller_id, callee_id, edge_type),
+                    FOREIGN KEY (caller_id) REFERENCES nodes(id) ON DELETE CASCADE,
+                    FOREIGN KEY (callee_id) REFERENCES nodes(id) ON DELETE CASCADE
                 );
             """)
+
+            # 3. High-performance indexes
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_symbol ON nodes(symbol_name);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_repo ON nodes(repo);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_caller ON edges(caller_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_callee ON edges(callee_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(edge_type);")
+
+            # 4. FTS5 Full-Text Search Virtual Table
+            try:
+                conn.execute("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+                        id UNINDEXED,
+                        symbol_name,
+                        signature,
+                        docstring,
+                        code_content,
+                        content='nodes',
+                        content_rowid='rowid'
+                    );
+                """)
+                # Triggers to keep FTS in sync with nodes table
+                conn.execute("""
+                    CREATE TRIGGER IF NOT EXISTS nodes_ai AFTER INSERT ON nodes BEGIN
+                        INSERT INTO nodes_fts(rowid, id, symbol_name, signature, docstring, code_content)
+                        VALUES (new.rowid, new.id, new.symbol_name, new.signature, new.docstring, new.code_content);
+                    END;
+                """)
+                conn.execute("""
+                    CREATE TRIGGER IF NOT EXISTS nodes_ad AFTER DELETE ON nodes BEGIN
+                        INSERT INTO nodes_fts(nodes_fts, rowid, id, symbol_name, signature, docstring, code_content)
+                        VALUES('delete', old.rowid, old.id, old.symbol_name, old.signature, old.docstring, old.code_content);
+                    END;
+                """)
+                conn.execute("""
+                    CREATE TRIGGER IF NOT EXISTS nodes_au AFTER UPDATE ON nodes BEGIN
+                        INSERT INTO nodes_fts(nodes_fts, rowid, id, symbol_name, signature, docstring, code_content)
+                        VALUES('delete', old.rowid, old.id, old.symbol_name, old.signature, old.docstring, old.code_content);
+                        INSERT INTO nodes_fts(rowid, id, symbol_name, signature, docstring, code_content)
+                        VALUES (new.rowid, new.id, new.symbol_name, new.signature, new.docstring, new.code_content);
+                    END;
+                """)
+            except sqlite3.OperationalError:
+                # Fallback if FTS5 is not compiled into system sqlite3
+                pass
+
             conn.commit()
 
+    # -------------------------------------------------------------
+    # Ingestion Methods
+    # -------------------------------------------------------------
+
     def insert_node(self, node: CodeNode) -> None:
-        """Inserts or replaces a CodeNode in the database and updates FTS5 index."""
+        """Inserts or replaces a single CodeNode."""
+        self.insert_nodes([node])
+
+    def insert_nodes(self, nodes: List[CodeNode]) -> None:
+        """Batch inserts or replaces CodeNodes."""
+        if not nodes:
+            return
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
+            records = [
+                (
+                    n.id,
+                    n.repo,
+                    n.file_path,
+                    n.symbol_name,
+                    n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else n.symbol_type,
+                    n.start_line,
+                    n.end_line,
+                    n.signature or "",
+                    n.docstring or "",
+                    n.code_content or "",
+                    json.dumps(n.metadata or {})
+                )
+                for n in nodes
+            ]
+            conn.executemany("""
                 INSERT OR REPLACE INTO nodes (
                     id, repo, file_path, symbol_name, symbol_type,
-                    start_line, end_line, signature, docstring,
-                    code_content, language, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    node.id,
-                    node.repo,
-                    node.file_path,
-                    node.symbol_name,
-                    node.symbol_type.value if isinstance(node.symbol_type, SymbolType) else str(node.symbol_type),
-                    node.start_line,
-                    node.end_line,
-                    node.signature,
-                    node.docstring,
-                    node.code_content,
-                    node.language,
-                    json.dumps(node.metadata or {}),
-                ),
-            )
-            # Update FTS index
-            cursor.execute("DELETE FROM nodes_fts WHERE id = ?", (node.id,))
-            cursor.execute(
-                """
-                INSERT INTO nodes_fts (id, symbol_name, signature, docstring, code_content)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    node.id,
-                    node.symbol_name or "",
-                    node.signature or "",
-                    node.docstring or "",
-                    node.code_content or "",
-                ),
-            )
+                    start_line, end_line, signature, docstring, code_content, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, records)
             conn.commit()
 
     def insert_edge(self, edge: CodeEdge) -> None:
-        """Inserts or replaces a CodeEdge in the database."""
-        edge_id = edge.id or f"{edge.caller_id}->{edge.edge_type}->{edge.callee_id}"
+        """Inserts or ignores a single CodeEdge."""
+        self.insert_edges([edge])
+
+    def insert_edges(self, edges: List[CodeEdge]) -> None:
+        """Batch inserts CodeEdges."""
+        if not edges:
+            return
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO edges (
-                    id, caller_id, callee_id, edge_type,
-                    caller_repo, callee_repo, context_line,
-                    call_snippet, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            records = [
                 (
-                    edge_id,
-                    edge.caller_id,
-                    edge.callee_id,
-                    edge.edge_type.value if isinstance(edge.edge_type, EdgeType) else str(edge.edge_type),
-                    edge.caller_repo,
-                    edge.callee_repo,
-                    edge.context_line,
-                    edge.call_snippet,
-                    json.dumps(edge.metadata or {}),
-                ),
-            )
+                    e.caller_id,
+                    e.callee_id,
+                    e.edge_type.value if isinstance(e.edge_type, EdgeType) else e.edge_type,
+                    float(e.confidence),
+                    json.dumps(e.metadata or {})
+                )
+                for e in edges
+            ]
+            conn.executemany("""
+                INSERT OR IGNORE INTO edges (
+                    caller_id, callee_id, edge_type, confidence, metadata_json
+                ) VALUES (?, ?, ?, ?, ?);
+            """, records)
             conn.commit()
+
+    # -------------------------------------------------------------
+    # Query Methods
+    # -------------------------------------------------------------
 
     def _row_to_node(self, row: sqlite3.Row) -> CodeNode:
         meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
@@ -160,301 +204,188 @@ class SQLiteGraphStorage:
             repo=row["repo"],
             file_path=row["file_path"],
             symbol_name=row["symbol_name"],
-            symbol_type=SymbolType(row["symbol_type"]) if row["symbol_type"] in [s.value for s in SymbolType] else SymbolType.FUNCTION,
+            symbol_type=SymbolType(row["symbol_type"]) if row["symbol_type"] in SymbolType._value2member_map_ else SymbolType.FUNCTION,
             start_line=row["start_line"],
             end_line=row["end_line"],
             signature=row["signature"],
             docstring=row["docstring"],
             code_content=row["code_content"],
-            language=row["language"],
-            metadata=meta,
+            metadata=meta
         )
 
-    def _row_to_edge(self, row: sqlite3.Row) -> CodeEdge:
-        meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
-        return CodeEdge(
-            id=row["id"],
-            caller_id=row["caller_id"],
-            callee_id=row["callee_id"],
-            edge_type=EdgeType(row["edge_type"]) if row["edge_type"] in [e.value for e in EdgeType] else EdgeType.CALLS,
-            caller_repo=row["caller_repo"],
-            callee_repo=row["callee_repo"],
-            context_line=row["context_line"],
-            call_snippet=row["call_snippet"],
-            metadata=meta,
-        )
-
-    def get_node_by_id(self, node_id: str) -> Optional[CodeNode]:
+    def get_node(self, node_id: str) -> Optional[CodeNode]:
+        """Retrieves a node by its unique deterministic ID."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+            cursor = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
             row = cursor.fetchone()
             return self._row_to_node(row) if row else None
 
-    def find_nodes_by_symbol(self, symbol_name: str, repo: Optional[str] = None) -> List[CodeNode]:
-        """Finds code nodes matching a symbol name, optionally filtered by repository."""
+    def find_nodes_by_name(self, symbol_name: str, repo: Optional[str] = None) -> List[CodeNode]:
+        """Exact match lookup for symbols by name across or within repos."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
             if repo:
-                cursor.execute(
-                    "SELECT * FROM nodes WHERE symbol_name = ? AND repo = ? ORDER BY start_line ASC",
-                    (symbol_name, repo),
+                cursor = conn.execute(
+                    "SELECT * FROM nodes WHERE symbol_name = ? AND repo = ?",
+                    (symbol_name, repo)
                 )
             else:
-                cursor.execute(
-                    "SELECT * FROM nodes WHERE symbol_name = ? ORDER BY repo, file_path",
-                    (symbol_name,),
+                cursor = conn.execute(
+                    "SELECT * FROM nodes WHERE symbol_name = ?",
+                    (symbol_name,)
                 )
-            return [self._row_to_node(row) for row in cursor.fetchall()]
+            return [self._row_to_node(r) for r in cursor.fetchall()]
 
-    def get_callers(self, node_id: str) -> List[CodeNode]:
-        """Returns all nodes that call/consume this node."""
+    def search_nodes_lexical(self, query: str, repo: Optional[str] = None, limit: int = 10) -> List[CodeNode]:
+        """Fast lexical full-text search using FTS5 or LIKE fallback."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT n.* FROM nodes n
-                JOIN edges e ON n.id = e.caller_id
-                WHERE e.callee_id = ?
-                """,
-                (node_id,),
-            )
-            return [self._row_to_node(row) for row in cursor.fetchall()]
-
-    def get_callees(self, node_id: str) -> List[CodeNode]:
-        """Returns all nodes that are called/consumed by this node."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT n.* FROM nodes n
-                JOIN edges e ON n.id = e.callee_id
-                WHERE e.caller_id = ?
-                """,
-                (node_id,),
-            )
-            return [self._row_to_node(row) for row in cursor.fetchall()]
-
-    def get_edges_for_node(self, node_id: str, direction: str = "both") -> List[CodeEdge]:
-        """Returns edges connected to a node."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            if direction == "downstream" or direction == "callers":
-                cursor.execute("SELECT * FROM edges WHERE callee_id = ?", (node_id,))
-            elif direction == "upstream" or direction == "callees":
-                cursor.execute("SELECT * FROM edges WHERE caller_id = ?", (node_id,))
-            else:
-                cursor.execute("SELECT * FROM edges WHERE caller_id = ? OR callee_id = ?", (node_id, node_id))
-            return [self._row_to_edge(row) for row in cursor.fetchall()]
-
-    def traverse_graph(
-        self, entry_symbol: str, depth: int = 2, direction: str = "both", repo: Optional[str] = None
-    ) -> TraversalResult:
-        """Traverses the call/dependency graph starting from a symbol name or node ID."""
-        start_nodes = self.find_nodes_by_symbol(entry_symbol, repo)
-        if not start_nodes:
-            # Check if entry_symbol is a direct node ID
-            single = self.get_node_by_id(entry_symbol)
-            if single:
-                start_nodes = [single]
-
-        if not start_nodes:
-            return TraversalResult(
-                entry_symbol=entry_symbol,
-                direction=direction,
-                depth=depth,
-                nodes=[],
-                edges=[],
-                impacted_repos=[],
-                summary=f"Symbol '{entry_symbol}' not found in code graph.",
-            )
-
-        visited_node_ids: Set[str] = set()
-        collected_nodes: Dict[str, CodeNode] = {}
-        collected_edges: Dict[str, CodeEdge] = {}
-        impacted_repos: Set[str] = set()
-
-        current_frontier: Set[str] = {n.id for n in start_nodes}
-        for n in start_nodes:
-            collected_nodes[n.id] = n
-            impacted_repos.add(n.repo)
-
-        for _ in range(depth):
-            if not current_frontier:
-                break
-            next_frontier: Set[str] = set()
-            for current_id in current_frontier:
-                if current_id in visited_node_ids:
-                    continue
-                visited_node_ids.add(current_id)
-
-                edges = self.get_edges_for_node(current_id, direction=direction)
-                for e in edges:
-                    edge_key = e.id or f"{e.caller_id}->{e.edge_type}->{e.callee_id}"
-                    collected_edges[edge_key] = e
-
-                    target_ids = []
-                    if direction in ("both", "upstream", "callees"):
-                        target_ids.append(e.callee_id)
-                    if direction in ("both", "downstream", "callers"):
-                        target_ids.append(e.caller_id)
-
-                    for tid in target_ids:
-                        if tid not in collected_nodes:
-                            tn = self.get_node_by_id(tid)
-                            if tn:
-                                collected_nodes[tn.id] = tn
-                                impacted_repos.add(tn.repo)
-                        if tid not in visited_node_ids:
-                            next_frontier.add(tid)
-
-            current_frontier = next_frontier
-
-        summary = (
-            f"Traversed {len(collected_nodes)} nodes and {len(collected_edges)} edges across "
-            f"{len(impacted_repos)} repositories ({', '.join(sorted(impacted_repos))}) for entry symbol '{entry_symbol}'."
-        )
-
-        return TraversalResult(
-            entry_symbol=entry_symbol,
-            direction=direction,
-            depth=depth,
-            nodes=list(collected_nodes.values()),
-            edges=list(collected_edges.values()),
-            impacted_repos=list(impacted_repos),
-            summary=summary,
-        )
-
-    def analyze_blast_radius(self, symbol_name: str, repo: Optional[str] = None) -> BlastRadiusReport:
-        """Determines full downstream blast radius of modifying or deprecating a symbol."""
-        nodes = self.find_nodes_by_symbol(symbol_name, repo)
-        if not nodes:
-            single = self.get_node_by_id(symbol_name)
-            nodes = [single] if single else []
-
-        if not nodes:
-            return BlastRadiusReport(
-                target_symbol=symbol_name,
-                recommended_actions=[f"Target symbol '{symbol_name}' not found."],
-            )
-
-        target = nodes[0]
-        direct_callers = self.get_callers(target.id)
-        indirect_callers_map: Dict[str, CodeNode] = {}
-        cross_repo_impact: Dict[str, List[CodeNode]] = {}
-        affected_endpoints: List[str] = []
-
-        if target.symbol_type == SymbolType.ENDPOINT:
-            affected_endpoints.append(target.symbol_name)
-
-        # Check direct callers
-        for dc in direct_callers:
-            if dc.repo != target.repo:
-                cross_repo_impact.setdefault(dc.repo, []).append(dc)
-            if dc.symbol_type == SymbolType.ENDPOINT:
-                affected_endpoints.append(dc.symbol_name)
-
-            # Look 2 levels deep for indirect callers
-            second_callers = self.get_callers(dc.id)
-            for sc in second_callers:
-                if sc.id != target.id and sc.id != dc.id:
-                    indirect_callers_map[sc.id] = sc
-                    if sc.repo != target.repo:
-                        cross_repo_impact.setdefault(sc.repo, []).append(sc)
-
-        actions = []
-        if cross_repo_impact:
-            actions.append(
-                f"Cross-repo impact detected in {len(cross_repo_impact)} external repos: {list(cross_repo_impact.keys())}. Update API client bindings."
-            )
-        if affected_endpoints:
-            actions.append(f"HTTP Endpoints affected: {list(set(affected_endpoints))}. Verify API contract compatibility.")
-
-        return BlastRadiusReport(
-            target_symbol=symbol_name,
-            target_node=target,
-            direct_callers=direct_callers,
-            indirect_callers=list(indirect_callers_map.values()),
-            cross_repo_impact=cross_repo_impact,
-            recommended_actions=actions,
-            affected_endpoints=list(set(affected_endpoints)),
-        )
-
-    def search_nodes_fts(self, query: str, repo: Optional[str] = None, limit: int = 20) -> List[CodeNode]:
-        """Performs full text search over symbols, signatures, docstrings, and code content."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            # Escape or sanitize query for FTS5
-            sanitized_query = query.replace('"', '""').replace("'", "''")
-            fts_query = f'"{sanitized_query}"'
-
             try:
+                # Try FTS5 match query first
+                safe_query = "".join(c for c in query if c.isalnum() or c in (" ", "_", "-")).strip()
+                if not safe_query:
+                    return []
+                fts_expr = f"{safe_query}*"
+                
                 if repo:
-                    cursor.execute(
-                        """
+                    cursor = conn.execute("""
                         SELECT n.* FROM nodes n
                         JOIN nodes_fts f ON n.id = f.id
                         WHERE nodes_fts MATCH ? AND n.repo = ?
                         LIMIT ?
-                        """,
-                        (fts_query, repo, limit),
-                    )
+                    """, (fts_expr, repo, limit))
                 else:
-                    cursor.execute(
-                        """
+                    cursor = conn.execute("""
                         SELECT n.* FROM nodes n
                         JOIN nodes_fts f ON n.id = f.id
                         WHERE nodes_fts MATCH ?
                         LIMIT ?
-                        """,
-                        (fts_query, limit),
-                    )
-                rows = cursor.fetchall()
+                    """, (fts_expr, limit))
+                results = [self._row_to_node(r) for r in cursor.fetchall()]
+                if results:
+                    return results
             except sqlite3.OperationalError:
-                # Fallback to LIKE if FTS query syntax error
-                like_term = f"%{query}%"
-                if repo:
-                    cursor.execute(
-                        """
-                        SELECT * FROM nodes
-                        WHERE (symbol_name LIKE ? OR signature LIKE ? OR docstring LIKE ? OR code_content LIKE ?)
-                        AND repo = ?
-                        LIMIT ?
-                        """,
-                        (like_term, like_term, like_term, like_term, repo, limit),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        SELECT * FROM nodes
-                        WHERE symbol_name LIKE ? OR signature LIKE ? OR docstring LIKE ? OR code_content LIKE ?
-                        LIMIT ?
-                        """,
-                        (like_term, like_term, like_term, like_term, limit),
-                    )
-                rows = cursor.fetchall()
+                pass
 
-            return [self._row_to_node(r) for r in rows]
-
-    def get_all_nodes(self, repo: Optional[str] = None) -> List[CodeNode]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+            # Fallback to standard LIKE matching
+            pattern = f"%{query}%"
             if repo:
-                cursor.execute("SELECT * FROM nodes WHERE repo = ? ORDER BY file_path, start_line", (repo,))
+                cursor = conn.execute("""
+                    SELECT * FROM nodes
+                    WHERE (symbol_name LIKE ? OR signature LIKE ? OR docstring LIKE ?) AND repo = ?
+                    LIMIT ?
+                """, (pattern, pattern, pattern, repo, limit))
             else:
-                cursor.execute("SELECT * FROM nodes ORDER BY repo, file_path, start_line")
+                cursor = conn.execute("""
+                    SELECT * FROM nodes
+                    WHERE (symbol_name LIKE ? OR signature LIKE ? OR docstring LIKE ?)
+                    LIMIT ?
+                """, (pattern, pattern, pattern, limit))
             return [self._row_to_node(r) for r in cursor.fetchall()]
 
-    def get_all_edges(self) -> List[CodeEdge]:
+    def get_callers(self, callee_id: str) -> List[CodeNode]:
+        """Returns all nodes that directly call, import, or consume the given callee_id."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM edges")
-            return [self._row_to_edge(r) for r in cursor.fetchall()]
+            cursor = conn.execute("""
+                SELECT n.* FROM nodes n
+                JOIN edges e ON n.id = e.caller_id
+                WHERE e.callee_id = ?
+            """, (callee_id,))
+            return [self._row_to_node(r) for r in cursor.fetchall()]
 
-    def clear_all(self):
+    def get_callees(self, caller_id: str) -> List[CodeNode]:
+        """Returns all nodes directly called or imported by the given caller_id."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM edges;")
-            cursor.execute("DELETE FROM nodes;")
-            cursor.execute("DELETE FROM nodes_fts;")
-            conn.commit()
+            cursor = conn.execute("""
+                SELECT n.* FROM nodes n
+                JOIN edges e ON n.id = e.callee_id
+                WHERE e.caller_id = ?
+            """, (caller_id,))
+            return [self._row_to_node(r) for r in cursor.fetchall()]
+
+    def traverse_blast_radius(self, root_symbol_or_id: str, max_depth: int = 3) -> TraversalResult:
+        """
+        Traces the full upstream and downstream graph starting from a symbol name or node ID.
+        Identifies all affected callers across repositories (the blast radius of a change).
+        """
+        start_time = time.time()
+        
+        # Resolve initial node(s)
+        initial_nodes = []
+        node_by_id = self.get_node(root_symbol_or_id)
+        if node_by_id:
+            initial_nodes.append(node_by_id)
+        else:
+            initial_nodes = self.find_nodes_by_name(root_symbol_or_id)
+
+        if not initial_nodes:
+            return TraversalResult(
+                root_symbol=root_symbol_or_id,
+                depth=0,
+                execution_time_ms=(time.time() - start_time) * 1000.0
+            )
+
+        visited_upstream: Set[str] = set()
+        visited_downstream: Set[str] = set()
+        upstream_nodes: List[CodeNode] = []
+        downstream_nodes: List[CodeNode] = []
+        blast_files: Set[str] = set()
+
+        for init_node in initial_nodes:
+            blast_files.add(f"{init_node.repo}:{init_node.file_path}")
+
+            # 1. Trace Upstream (Who calls this symbol? Blast radius for breaking API changes)
+            current_level = [init_node.id]
+            visited_upstream.add(init_node.id)
+
+            for _ in range(max_depth):
+                next_level = []
+                for cid in current_level:
+                    callers = self.get_callers(cid)
+                    for caller in callers:
+                        if caller.id not in visited_upstream:
+                            visited_upstream.add(caller.id)
+                            upstream_nodes.append(caller)
+                            blast_files.add(f"{caller.repo}:{caller.file_path}")
+                            next_level.append(caller.id)
+                if not next_level:
+                    break
+                current_level = next_level
+
+            # 2. Trace Downstream (What does this symbol depend on?)
+            current_down = [init_node.id]
+            visited_downstream.add(init_node.id)
+
+            for _ in range(max_depth):
+                next_down = []
+                for cid in current_down:
+                    callees = self.get_callees(cid)
+                    for callee in callees:
+                        if callee.id not in visited_downstream:
+                            visited_downstream.add(callee.id)
+                            downstream_nodes.append(callee)
+                            blast_files.add(f"{callee.repo}:{callee.file_path}")
+                            next_down.append(callee.id)
+                if not next_down:
+                    break
+                current_down = next_down
+
+        return TraversalResult(
+            root_symbol=root_symbol_or_id,
+            depth=max_depth,
+            upstream_callers=upstream_nodes,
+            downstream_dependencies=downstream_nodes,
+            blast_radius_files=sorted(list(blast_files)),
+            execution_time_ms=(time.time() - start_time) * 1000.0
+        )
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Returns database statistics for monitoring and UI display."""
+        with self._get_connection() as conn:
+            node_count = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+            edge_count = conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
+            repos = [r[0] for r in conn.execute("SELECT DISTINCT repo FROM nodes").fetchall()]
+            return {
+                "total_symbols": node_count,
+                "total_edges": edge_count,
+                "repositories": repos,
+                "db_engine": "SQLite WAL + FTS5"
+            }
