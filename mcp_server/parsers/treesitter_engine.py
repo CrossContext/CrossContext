@@ -38,7 +38,6 @@ class TreeSitterEngine:
             }
             self.ts_available = True
         except (ImportError, Exception):
-            # Fallback to robust native AST + syntax-aware regex parsers
             self.ts_available = False
 
     def parse_file(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
@@ -79,12 +78,30 @@ class TreeSitterEngine:
 
         return all_nodes, all_edges
 
+    @staticmethod
+    def _find_closing_brace(lines: List[str], start_idx: int) -> int:
+        """Finds the 1-indexed line number of matching closing brace for a code block."""
+        depth = 0
+        found_open = False
+        for i in range(start_idx - 1, len(lines)):
+            line = lines[i]
+            clean_line = re.sub(r'//.*$|/\*.*?\*/', '', line)
+            for ch in clean_line:
+                if ch == '{':
+                    depth += 1
+                    found_open = True
+                elif ch == '}':
+                    depth -= 1
+                    if found_open and depth == 0:
+                        return i + 1
+        return min(start_idx + 30, len(lines))
+
     # -------------------------------------------------------------
     # Python Parser Implementation
     # -------------------------------------------------------------
 
     def _parse_python(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Parses Python code using AST and extracts symbols, endpoints, and call relations."""
+        """Parses Python code using AST and extracts symbols, endpoints, imports, and call relations."""
         nodes: List[CodeNode] = []
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
@@ -94,10 +111,22 @@ class TreeSitterEngine:
         except SyntaxError:
             return self._parse_python_regex_fallback(repo, file_path, lines)
 
+        # Extract imports for resolvable call linkage
+        file_imports = []
+        for item in tree.body:
+            if isinstance(item, ast.Import):
+                for alias in item.names:
+                    file_imports.append(alias.name)
+            elif isinstance(item, ast.ImportFrom) and item.module:
+                file_imports.append(item.module)
+                for alias in item.names:
+                    file_imports.append(f"{item.module}.{alias.name}")
+
         # First pass: Extract Classes, Functions, and Endpoint decorators
         for item in tree.body:
             if isinstance(item, ast.ClassDef):
                 node = self._extract_python_class(repo, file_path, item, lines)
+                node.metadata["file_imports"] = file_imports
                 nodes.append(node)
 
                 # Class inheritance edge
@@ -112,8 +141,8 @@ class TreeSitterEngine:
                         method_node = self._extract_python_function(
                             repo, file_path, subitem, lines, is_method=True, parent_class=item.name
                         )
+                        method_node.metadata["file_imports"] = file_imports
                         nodes.append(method_node)
-                        # Edge: Class defines Method
                         edges.append(CodeEdge(
                             caller_id=node.id,
                             callee_id=method_node.id,
@@ -122,6 +151,7 @@ class TreeSitterEngine:
 
             elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 node = self._extract_python_function(repo, file_path, item, lines, is_method=False)
+                node.metadata["file_imports"] = file_imports
                 nodes.append(node)
 
         # Second pass: Extract internal function call invocations
@@ -216,6 +246,7 @@ class TreeSitterEngine:
             f_match = func_pattern.match(line)
             if f_match:
                 name = f_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
                 nodes.append(CodeNode(
                     id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
@@ -223,12 +254,13 @@ class TreeSitterEngine:
                     symbol_name=name,
                     symbol_type=SymbolType.FUNCTION,
                     start_line=idx,
-                    end_line=min(idx + 20, len(lines)),
+                    end_line=end_line,
                     signature=line.strip()
                 ))
             c_match = class_pattern.match(line)
             if c_match:
                 name = c_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
                 nodes.append(CodeNode(
                     id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
@@ -236,7 +268,7 @@ class TreeSitterEngine:
                     symbol_name=name,
                     symbol_type=SymbolType.CLASS,
                     start_line=idx,
-                    end_line=min(idx + 30, len(lines)),
+                    end_line=end_line,
                     signature=line.strip()
                 ))
         return nodes, []
@@ -251,12 +283,18 @@ class TreeSitterEngine:
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
 
+        # Extract import statements
+        file_imports = []
+        for imp_match in re.finditer(r'import\s+.*?\s+from\s+[\'"]([^\'"]+)[\'"]', content):
+            file_imports.append(imp_match.group(1))
+
         # 1. Interface & Type definitions
         interface_pattern = re.compile(r'(?:export\s+)?(?:interface|type)\s+([a-zA-Z0-9_]+)')
         for idx, line in enumerate(lines, start=1):
             i_match = interface_pattern.search(line)
             if i_match:
                 name = i_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
                 nodes.append(CodeNode(
                     id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
@@ -264,8 +302,9 @@ class TreeSitterEngine:
                     symbol_name=name,
                     symbol_type=SymbolType.INTERFACE,
                     start_line=idx,
-                    end_line=min(idx + 20, len(lines)),
-                    signature=line.strip()
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
                 ))
 
         # 2. Functions, Arrow functions, and Class methods
@@ -275,7 +314,7 @@ class TreeSitterEngine:
             re.compile(r'^\s*(?:public|private|protected|async)?\s*(?:async\s+)?([a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?::\s*[^{]+)?\s*\{'),
         ]
 
-        api_call_pattern = re.compile(r'(?:fetch|axios\.(?:get|post|put|delete|patch)|apiClient\.(?:get|post|put|delete|patch)|api\.(?:get|post|put|delete|patch))\s*\(\s*[`\'"]([^`\'"]+)[`\'"]')
+        api_call_pattern = re.compile(r'(?:fetch|axios\.(?P<method>get|post|put|delete|patch)|apiClient\.(?P<client_method>get|post|put|delete|patch)|api\.(?P<api_method>get|post|put|delete|patch))\s*\(\s*[`\'"]([^`\'"]+)[`\'"]')
 
         for idx, line in enumerate(lines, start=1):
             for pat in func_patterns:
@@ -285,23 +324,35 @@ class TreeSitterEngine:
                     if name in ("if", "for", "while", "switch", "catch", "class", "interface", "constructor"):
                         continue
 
-                    end_line = min(idx + 30, len(lines))
+                    end_line = self._find_closing_brace(lines, idx)
                     block = "".join(lines[idx - 1 : end_line])
+
+                    meta: Dict[str, Any] = {"file_imports": file_imports}
 
                     # Check for API endpoint calls
                     api_match = api_call_pattern.search(block)
-                    meta = {}
                     if api_match:
-                        raw_endpoint = api_match.group(1)
-                        # Clean template string like `${this.baseUrl}/api/v1/auth/verify`
-                        route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/]+)', raw_endpoint)
-                        meta["consumes_endpoint"] = route_m.group(1) if route_m else raw_endpoint
+                        raw_endpoint = api_match.group(4) or api_match.group(0)
+                        http_verb = api_match.group("method") or api_match.group("client_method") or api_match.group("api_method") or "GET"
+                        if "method: \"POST\"" in block or "method: 'POST'" in block:
+                            http_verb = "POST"
+                        elif "method: \"GET\"" in block or "method: 'GET'" in block:
+                            http_verb = "GET"
 
-                    # Also check for direct route strings in block
+                        # Strip protocol and domain if absolute URL (e.g. https://auth.internal.corp/api/v1/auth/verify)
+                        cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_endpoint)
+                        route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/]+)', cleaned_endpoint)
+                        meta["consumes_endpoint"] = route_m.group(1) if route_m else cleaned_endpoint
+                        meta["consumes_http_method"] = http_verb.upper()
+
+                    # Direct route literal fallback
                     if "consumes_endpoint" not in meta:
-                        direct_route = re.search(r'[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/]+)[\'"`]', block)
-                        if direct_route:
-                            meta["consumes_endpoint"] = direct_route.group(1)
+                        for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/]+)[\'"`]', block):
+                            target_url = direct_match.group(2) if direct_match.group(2) else direct_match.group(3)
+                            if target_url:
+                                meta["consumes_endpoint"] = target_url
+                                meta["consumes_http_method"] = "POST" if ("post" in block.lower() or "POST" in block) else "GET"
+                                break
 
                     node = CodeNode(
                         id=CodeNode.generate_id(repo, file_path, name, idx),
@@ -325,7 +376,7 @@ class TreeSitterEngine:
     # -------------------------------------------------------------
 
     def _parse_go(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Parses Go files for functions, structs, and receiver methods."""
+        """Parses Go files for functions, structs, and receiver methods with exact brace boundaries."""
         nodes: List[CodeNode] = []
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
@@ -338,7 +389,7 @@ class TreeSitterEngine:
             if f_match:
                 name = f_match.group("name")
                 recv = f_match.group("recv")
-                end_line = min(idx + 30, len(lines))
+                end_line = self._find_closing_brace(lines, idx)
                 block = "".join(lines[idx - 1 : end_line])
                 sym_type = SymbolType.METHOD if recv else SymbolType.FUNCTION
                 node_id = CodeNode.generate_id(repo, file_path, name, idx)
@@ -358,7 +409,7 @@ class TreeSitterEngine:
             s_match = struct_pattern.match(line)
             if s_match:
                 name = s_match.group("name")
-                end_line = min(idx + 20, len(lines))
+                end_line = self._find_closing_brace(lines, idx)
                 block = "".join(lines[idx - 1 : end_line])
                 node_id = CodeNode.generate_id(repo, file_path, name, idx)
                 nodes.append(CodeNode(
@@ -380,19 +431,32 @@ class TreeSitterEngine:
     # -------------------------------------------------------------
 
     def _parse_java(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Parses Java files for classes, methods, and Spring Boot annotations."""
+        """Parses Java files for classes, methods, and Spring Boot annotations including controller prefixes."""
         nodes: List[CodeNode] = []
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
 
         class_pattern = re.compile(r'public\s+(?:class|interface)\s+([a-zA-Z0-9_]+)')
         method_pattern = re.compile(r'public\s+(?:[a-zA-Z0-9_<>,\[\]]+\s+)+([a-zA-Z0-9_]+)\s*\((.*?)\)')
-        spring_route_pattern = re.compile(r'@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?["\']([^"\']+)["\']')
+        spring_method_route = re.compile(r'@(?P<verb>GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?["\']([^"\']+)["\']')
+        spring_class_route = re.compile(r'@RequestMapping\s*\(\s*(?:value\s*=\s*)?["\']([^"\']+)["\']')
+
+        # Detect class-level @RequestMapping prefix
+        class_prefix = ""
+        for idx, line in enumerate(lines, start=1):
+            if class_pattern.search(line):
+                # Look at previous 3 lines for class annotation
+                context_prev = "".join(lines[max(0, idx - 4) : idx])
+                c_route_m = spring_class_route.search(context_prev)
+                if c_route_m:
+                    class_prefix = c_route_m.group(1).rstrip("/")
+                break
 
         for idx, line in enumerate(lines, start=1):
             c_match = class_pattern.search(line)
             if c_match:
                 name = c_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
                 nodes.append(CodeNode(
                     id=CodeNode.generate_id(repo, file_path, name, idx),
                     repo=repo,
@@ -400,24 +464,31 @@ class TreeSitterEngine:
                     symbol_name=name,
                     symbol_type=SymbolType.CLASS,
                     start_line=idx,
-                    end_line=min(idx + 40, len(lines)),
+                    end_line=end_line,
                     signature=line.strip()
                 ))
 
             m_match = method_pattern.search(line)
             if m_match:
                 name = m_match.group(1)
-                end_line = min(idx + 25, len(lines))
+                end_line = self._find_closing_brace(lines, idx)
                 block = "".join(lines[idx - 1 : end_line])
 
-                # Check previous line for Spring annotation
-                prev_line = lines[idx - 2] if idx > 1 else ""
-                route_match = spring_route_pattern.search(prev_line) or spring_route_pattern.search(line)
-                meta = {}
+                # Check previous lines for Spring route annotation
+                context_lines = "".join(lines[max(0, idx - 4) : idx])
+                route_match = spring_method_route.search(context_lines) or spring_method_route.search(line)
+                meta: Dict[str, Any] = {}
                 is_endpoint = False
+
                 if route_match:
                     is_endpoint = True
-                    meta["endpoint_route"] = route_match.group(1)
+                    raw_subpath = route_match.group(2).lstrip("/")
+                    composed_path = f"{class_prefix}/{raw_subpath}" if class_prefix else f"/{raw_subpath}"
+                    verb_raw = route_match.group("verb").replace("Mapping", "").upper()
+                    http_method = "GET" if verb_raw == "REQUEST" else verb_raw
+
+                    meta["endpoint_route"] = composed_path
+                    meta["http_method"] = http_method
 
                 sym_type = SymbolType.ENDPOINT if is_endpoint else SymbolType.METHOD
                 nodes.append(CodeNode(
@@ -436,5 +507,4 @@ class TreeSitterEngine:
         return nodes, edges
 
     def _parse_generic(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Fallback parser for generic code files."""
         return [], []
