@@ -1,77 +1,99 @@
-"""Unit Tests for MCP Deterministic Code Graph Tools."""
+"""Unit & Integration Tests for OmniContext MCP Code Graph Tools."""
 
 import pytest
 from pathlib import Path
-from mcp_server.parsers.scip_indexer import SCIPIndexer
-from mcp_server.storage.sqlite_graph import SQLiteGraphStorage
-from mcp_server.tools import CodeGraphTools
+from mcp_server.tools import CodeGraphToolManager
+from common.models import SymbolType
 
 
 @pytest.fixture
-def populated_tools(tmp_path):
-    db_file = tmp_path / "test_mcp_graph.db"
-    storage = SQLiteGraphStorage(db_path=str(db_file))
-    indexer = SCIPIndexer(storage=storage)
-
+def populated_tool_manager(tmp_path):
+    db_file = tmp_path / "test_mcp.db"
+    manager = CodeGraphToolManager(db_path=str(db_file))
     root = Path(__file__).resolve().parent.parent / "testbed"
+
     repos = {
         "repo_auth_core": str(root / "repo_auth_core"),
         "repo_frontend_portal": str(root / "repo_frontend_portal"),
     }
-    indexer.index_multi_repos(repos)
-    return CodeGraphTools(storage=storage)
+    manager.index_repositories(repos)
+    return manager
 
 
-def test_find_symbol_definition(populated_tools):
-    res = populated_tools.find_symbol_definition("verify_jwt_token")
-    assert res["found_count"] >= 1
-    definition = res["definitions"][0]
-    assert definition["symbol_name"] == "verify_jwt_token"
-    assert definition["repo"] == "repo_auth_core"
-    assert "Decodes and validates JWT" in definition["docstring"]
+def test_get_symbol_definition(populated_tool_manager):
+    res = populated_tool_manager.get_symbol_definition("verify_legacy_auth")
+    assert res["found"] is True
+    assert res["count"] >= 1
+    sym = res["symbols"][0]
+    assert sym["symbol_name"] == "verify_legacy_auth"
+    assert sym["repo"] == "repo_auth_core"
+    assert sym["symbol_type"] == "endpoint"
 
 
-def test_get_usage_dependency_links(populated_tools):
-    # Find endpoint node
-    res = populated_tools.find_symbol_definition("verify_auth_v1")
-    assert res["found_count"] >= 1
-    endpoint_node = res["definitions"][0]
-
-    dep_res = populated_tools.get_usage_dependency_links(endpoint_node["id"])
-    assert "error" not in dep_res
-    assert len(dep_res["edges"]) > 0
-
-    # Verify cross-repo caller from repo_frontend_portal
-    assert len(dep_res["cross_repo_callers"]) >= 1
-    assert dep_res["cross_repo_callers"][0]["repo"] == "repo_frontend_portal"
+def test_get_usage_dependency_links(populated_tool_manager):
+    res = populated_tool_manager.get_usage_dependency_links("verify_legacy_auth")
+    assert res["found"] is True
+    assert res["upstream_callers_count"] >= 1
+    # Check that caller is from frontend portal
+    caller = res["upstream_callers"][0]
+    assert caller["repo"] == "repo_frontend_portal"
 
 
-def test_traverse_call_graph(populated_tools):
-    res = populated_tools.traverse_call_graph(entry_symbol="verify_auth_v1", depth=2, direction="both")
-    assert res["entry_symbol"] == "verify_auth_v1"
-    assert len(res["nodes"]) >= 2
-    assert len(res["impacted_repos"]) >= 2
-    assert "repo_auth_core" in res["impacted_repos"]
-    assert "repo_frontend_portal" in res["impacted_repos"]
+def test_traverse_call_graph(populated_tool_manager):
+    res = populated_tool_manager.traverse_call_graph("verify_legacy_auth", depth=3)
+    assert res["root_symbol"] == "verify_legacy_auth"
+    assert len(res["upstream_callers"]) >= 1
+    assert any("repo_frontend_portal" in f for f in res["blast_radius_files"])
 
 
-def test_blast_radius_analysis(populated_tools):
-    report = populated_tools.blast_radius_analysis("verify_auth_v1")
-    assert report["target_symbol"] == "verify_auth_v1"
-    assert "repo_frontend_portal" in report["cross_repo_impact"]
-    assert len(report["affected_endpoints"]) >= 1
-    assert any("Cross-repo impact" in act for act in report["recommended_actions"])
+def test_get_ast_chunk(populated_tool_manager):
+    sym_def = populated_tool_manager.get_symbol_definition("verify_legacy_auth")
+    node_id = sym_def["symbols"][0]["id"]
+
+    chunk = populated_tool_manager.get_ast_chunk(node_id)
+    assert chunk["found"] is True
+    assert "verify_legacy_auth" in chunk["code_content"]
+    assert chunk["lines"] != ""
 
 
-def test_get_ast_chunk(populated_tools):
-    testbed_py = str(Path(__file__).resolve().parent.parent / "testbed" / "repo_auth_core" / "main.py")
-    res = populated_tools.get_ast_chunk(testbed_py, start_line=1, end_line=10)
-    assert "error" not in res
-    assert res["line_count"] == 10
-    assert "FastAPI" in res["code"]
+def test_multi_language_parsing():
+    from mcp_server.parsers.treesitter_engine import TreeSitterEngine
 
+    engine = TreeSitterEngine()
 
-def test_semantic_code_search(populated_tools):
-    res = populated_tools.semantic_code_search("JWT")
-    assert res["match_count"] >= 1
-    assert any("JWT" in (n.get("signature", "") + n.get("docstring", "") + n.get("code_content", "")) for n in res["results"])
+    # Test Go parsing
+    go_code = """
+package auth
+
+type SessionManager struct {
+    SecretKey string
+}
+
+func (s *SessionManager) ValidateToken(token string) bool {
+    return len(token) > 0
+}
+"""
+    go_nodes, _ = engine.parse_file("repo_go", "session.go", go_code)
+    assert len(go_nodes) >= 2
+    assert any(n.symbol_name == "ValidateToken" for n in go_nodes)
+
+    # Test Java parsing
+    java_code = """
+package com.auth.controller;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class AuthController {
+
+    @GetMapping("/api/v1/auth/verify")
+    public AuthResponse verifyToken(@RequestHeader String token) {
+        return new AuthResponse(true);
+    }
+}
+"""
+    java_nodes, _ = engine.parse_file("repo_java", "AuthController.java", java_code)
+    assert len(java_nodes) >= 2
+    endpoint_node = next((n for n in java_nodes if n.symbol_type == SymbolType.ENDPOINT), None)
+    assert endpoint_node is not None
+    assert endpoint_node.metadata.get("endpoint_route") == "/api/v1/auth/verify"

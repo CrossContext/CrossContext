@@ -77,6 +77,7 @@ class CodeGraphToolManager:
         callees = self.graph_store.get_callees(node.id)
 
         return {
+            "found": True,
             "target_symbol": node.to_dict(),
             "upstream_callers_count": len(callers),
             "upstream_callers": [c.to_dict() for c in callers],
