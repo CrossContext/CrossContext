@@ -1,5 +1,5 @@
 # OmniContext: Cross-Repository Code Context Engine
-### Deterministic Semantic Knowledge Graph & Autonomous Agent Context Engine for Multi-Repo Architectures
+### Deterministic Code Knowledge Graph & Autonomous Agent Context Engine for Multi-Repo Systems
 
 [![Built on AWS](https://img.shields.io/badge/Built%20on-Amazon%20Web%20Services-FF9900?logo=amazon-aws&logoColor=white)](https://aws.amazon.com)
 [![Model Context Protocol](https://img.shields.io/badge/Protocol-Model%20Context%20Protocol%20(MCP)-0052FF)](https://modelcontextprotocol.io)
@@ -11,170 +11,243 @@ Built for the **WeMakeDevs Bharat Builds Tour "First Commit" Hackathon** (Septem
 
 ---
 
-## 🚀 The Core Problem: Why LLMs Fail Across Multiple Repositories
+## 💡 What is OmniContext? (In Plain English)
 
-Modern software architectures have fractured across microservices, monorepos, and federated codebases. While LLMs excel at single-file edits, their performance degrades precipitously when tasked with multi-repository changes:
-- **Naive String RAG Fails**: Traditional RAG breaks code along arbitrary character or line counts, destroying AST structures and call graphs.
-- **Context Rot & Attention Dilution**: Dumping entire codebases into an LLM's context window causes hallucinations, lost instructions, and runaway token costs.
-- **Silent Downstream Breakages**: When an engineer or agent deprecates a backend endpoint in `Repo A`, standard tools fail to realize that `Repo B` relies on it, resulting in broken production deployments.
+When software teams build modern applications, their code is almost never in a single folder. It is spread across **multiple different repositories**—for example, a backend API repository (FastAPI / Go), a frontend web application (React / Next.js / TypeScript), and a shared core SDK.
 
-**OmniContext solves this by replacing probabilistic text search with compiler-accurate, deterministic semantic knowledge graphs accessed via the Model Context Protocol (MCP).**
+Today's AI coding tools struggle with this setup:
+- **They can't see the big picture**: If you change an API endpoint in the backend repository, the AI doesn't know which frontend buttons, forms, or mobile apps in other repositories depend on it.
+- **They waste thousands of tokens**: Traditional search dumps entire files into the AI chat. This quickly runs out of memory, costs a lot of money, and causes the AI to hallucinate or get confused.
+- **They cause silent bugs in production**: Because the AI doesn't trace dependencies across repositories, breaking changes slip into production unnoticed.
+
+### What OmniContext Does
+**OmniContext is an intelligent context engine that builds a real-time, compiler-accurate map (a code knowledge graph) connecting all your repositories together.**
+
+It inspects your actual code syntax, understands which functions call which endpoints across different services, and feeds an autonomous AI agent (powered by Amazon Bedrock Claude Sonnet 4) only the **exact** lines of code it needs to safely plan refactors, deprecations, and multi-repository migrations.
 
 ---
 
-## 🏛️ End-to-End Architecture
+## 🎯 How OmniContext Helps You
+
+| Challenge | What Traditional AI Tools Do | How OmniContext Solves It |
+| :--- | :--- | :--- |
+| **Cross-Repo Awareness** | Treats each repository as an isolated silo. Cannot tell that `fetch('/v1/auth')` in the frontend relies on `@router.post('/v1/auth')` in the backend. | **100% Cross-Repo Recall**: Automatically maps callers, callees, imports, and API routes across repository boundaries. |
+| **Token Cost & Speed** | Dumps whole files (14,500+ tokens) into the context window, causing slow responses and high API costs. | **97.6% Token Reduction**: Retrieves only the exact AST-bounded function chunks (~120 tokens), responding in sub-milliseconds. |
+| **AI Hallucinations** | Makes up non-existent file paths or invalid function signatures when guessing context. | **Zero Hallucination**: Grounded in deterministic compiler facts with exact file paths and line numbers. |
+| **Blast Radius Detection** | You don't know what will break until after code is pushed to staging/production. | **Instant Blast Radius Analysis**: Traces all upstream callers and downstream services before you make a change. |
+| **Real GitHub Repositories** | Often limited to pre-packaged toy datasets. | **Dynamic GitHub Ingestion**: Give it any public GitHub URL or local directory, and it clones, parses, and indexes it dynamically. |
+
+---
+
+## 🚀 How to Use OmniContext (Step-by-Step)
+
+### 1. Quick Installation (3 Minutes)
+
+#### Prerequisites
+- **Python 3.10+** installed
+- **Git** installed
+
+#### Clone & Install
+```bash
+# Clone the repository
+git clone https://github.com/abhayrajjais01/OmniContext.git
+cd OmniContext
+
+# Create and activate a Python virtual environment
+# On Windows PowerShell:
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# On macOS / Linux:
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+#### Set Up Your Environment
+```bash
+# Copy the example environment configuration
+# On Windows:
+copy .env.example .env
+# On macOS / Linux:
+cp .env.example .env
+```
+
+> **Note on Modes**:
+> - **Local Mode (`ENV=local`)**: **Default & Zero-Config**. Requires **no AWS account or credentials**. Uses local SQLite and an in-memory vector cache with a deterministic local reasoning engine.
+> - **AWS Cloud Mode (`ENV=aws`)**: Connects to **Amazon Bedrock** (Anthropic Claude Sonnet 4 + Titan Text Embeddings v2) and **Amazon OpenSearch Serverless (AOSS)**.
+
+---
+
+### 2. Method 1: The Interactive Web Dashboard (Recommended)
+
+Launch the visual dashboard in your browser:
+```bash
+streamlit run ui/app.py
+```
+Open your browser at **`http://localhost:8501`**.
+
+Here is what you can do in the dashboard:
+
+1. **📥 Ingest Real GitHub Repositories (Sidebar)**:
+   - On the left sidebar under **Dynamic GitHub Ingestion**, type or paste any GitHub URLs (one per line).
+   - Or pick a preset:
+     - *FastAPI & Starlette* (`https://github.com/fastapi/fastapi`, `https://github.com/encode/starlette`)
+     - *Pallets: Flask & Werkzeug* (`https://github.com/pallets/flask`, `https://github.com/pallets/werkzeug`)
+     - *OmniContext (Self-Index)* (`https://github.com/abhayrajjais01/OmniContext.git`)
+   - Click **📥 Clone & Index Repositories**. The engine will shallow-clone the repositories, parse all AST symbols, connect cross-repo routes, and reload the dashboard with live data.
+   - You can click **🔄 Reset to Demo Testbeds** at any time to return to the sample microservices testbed.
+
+2. **🚀 Run the Autonomous Agent (Tab 1: Agent Execution)**:
+   - Enter a cross-repository directive (for example: *"Deprecate legacy /v1/auth/verify endpoint and update all downstream frontend consumers to /v2/auth/token"*).
+   - Or pick a symbol from the **🎯 Quick Target Symbol** dropdown to auto-draft a task for any symbol found in your indexed code.
+   - Click **⚡ Execute Agent Loop**. Watch the agent traverse the graph, inspect caller functions, and generate a step-by-step cross-repository migration plan.
+   - Inspect the **Safety Guardrail Report** (cycle detection, token budget enforcement, and execution telemetry).
+
+3. **🕸️ Explore the Cross-Repo Graph (Tab 2: Cross-Repo Graph)**:
+   - View the color-coded interactive dependency graph.
+   - Filter by repository or search for specific symbols (functions, classes, endpoints).
+   - Use the **Max Graph Nodes** selector for ultra-fast rendering on massive codebases.
+   - Scroll down to the **🔎 Blast Radius Inspector**: enter or select any symbol name to see its entire blast radius—every file and line that calls it or depends on it across repositories.
+
+4. **📊 View Empirical Benchmarks (Tab 3: Benchmarks)**:
+   - Review side-by-side quantitative comparisons showing OmniContext's **97.6% token reduction** and **100% cross-repo recall** against standard Naive RAG.
+
+---
+
+### 3. Method 2: Command-Line Interface (CLI)
+
+You can also run all OmniContext tools directly from the terminal:
+
+#### Index Real GitHub Repositories via CLI
+```bash
+# Ingest one or more GitHub repositories
+python scripts/index_github_repos.py "https://github.com/fastapi/fastapi" "https://github.com/encode/starlette"
+
+# Or index local folder paths
+python scripts/index_github_repos.py "testbed/repo_auth_core" "testbed/repo_frontend_portal"
+```
+
+#### Run the Health & Smoke Test
+```bash
+python scripts/smoke_test.py
+```
+
+#### Run the Complete Test Suite
+```bash
+python -m pytest tests/ -v
+```
+
+#### Run the Quantitative Benchmark Suite
+```bash
+python evaluation/run_benchmarks.py
+```
+
+---
+
+### 4. Method 3: As a Model Context Protocol (MCP) Server
+
+OmniContext can act as a standard **Model Context Protocol (MCP)** server, providing deterministic code graph tools to external AI coding environments like **Claude Desktop**, **Cursor**, **Windsurf**, or custom agent frameworks:
+
+```bash
+python mcp_server/server.py
+```
+
+The MCP server exposes 5 deterministic tools:
+1. `traverse_call_graph`: Traces the blast radius of a symbol across all repositories.
+2. `get_symbol_definition`: Finds the exact code definition, file path, and line numbers of any function or class.
+3. `get_usage_dependency_links`: Identifies all callers and consumers across repo boundaries.
+4. `get_ast_chunk`: Retrieves the complete, unbroken AST syntax block for a specific symbol.
+5. `semantic_code_search`: Performs natural language conceptual searches backed by vector embeddings.
+
+---
+
+## 🏛️ How It Works Under the Hood
 
 ```mermaid
 flowchart TB
-    subgraph Repos["Multi-Repository Codebases"]
-        RepoA["Repo A (Backend Auth Service)"]
-        RepoB["Repo B (Frontend Client Portal)"]
+    subgraph Repos["1. Real Repositories (GitHub / Local)"]
+        RepoA["Backend Service (e.g., FastAPI / Go)"]
+        RepoB["Frontend Portal (e.g., React / TypeScript)"]
+        RepoC["Shared SDK / Core Library"]
     end
 
-    subgraph ParserLayer["Structural Parsing & Cross-Repo Linking"]
+    subgraph ParsingEngine["2. AST Parsing & Semantic Linking"]
         TS["Tree-sitter Parser\n(Boundary-Aware AST Chunking)"]
-        Linker["SCIP / Cross-Repo Linker\n(Maps API Consumers to Endpoints)"]
+        Linker["SCIP / Cross-Repo Linker\n(Matches HTTP Routes & Imports)"]
     end
 
-    subgraph StorageLayer["Dual-Mode Storage Architecture"]
-        SQLite["SQLite Relational Edge Matrix\n(Directional Callers/Callees + FTS5)"]
+    subgraph StorageLayer["3. Hybrid Knowledge Graph Storage"]
+        SQLite["SQLite Edge Matrix\n(Directional Call Graph + FTS5 Search)"]
         AOSS["Amazon OpenSearch Serverless\n(Dense Vector KNN Search)"]
         Titan["Amazon Titan Text Embeddings v2"]
     end
 
-    subgraph MCPGatekeeper["Model Context Protocol (MCP) Server"]
-        MCPServer["OmniContext MCP Server (JSON-RPC)"]
-        T1["traverse_call_graph (Blast Radius)"]
-        T2["get_symbol_definition"]
-        T3["get_usage_dependency_links"]
-        T4["get_ast_chunk"]
-        T5["semantic_code_search"]
+    subgraph MCPGatekeeper["4. Model Context Protocol (MCP) Server"]
+        Tools["Deterministic Tools:\n- traverse_call_graph\n- get_symbol_definition\n- get_usage_dependency_links\n- get_ast_chunk\n- semantic_code_search"]
     end
 
-    subgraph AgentLoop["Autonomous Orchestration"]
+    subgraph AgentCore["5. Autonomous Agent Orchestrator"]
         Strands["AWS Strands Agents SDK"]
-        Bedrock["Amazon Bedrock\n(Anthropic Claude 3.5 / 3.7 Sonnet)"]
-        Guardrails["Lifecycle Guardrails\n(Cycle Detector, Token Budget)"]
+        Bedrock["Amazon Bedrock (Claude Sonnet 4)"]
+        Guardrails["Lifecycle Guardrails\n(Cycle Detector & Token Budget)"]
     end
 
-    subgraph Interface["User & Judge Interfaces"]
-        UI["Interactive Streamlit Telemetry Dashboard"]
-        Runtime["Amazon Bedrock AgentCore Runtime (@app.entrypoint)"]
+    subgraph Interfaces["6. User Interfaces"]
+        UI["Interactive Streamlit Dashboard (Port 8501)"]
+        CLI["CLI Ingestion & Benchmark Scripts"]
     end
 
     Repos --> TS --> Linker
     Linker --> SQLite
     TS --> Titan --> AOSS
-    SQLite & AOSS --> MCPServer
-    MCPServer --> T1 & T2 & T3 & T4 & T5
-    T1 & T2 & T3 & T4 & T5 --> Strands
+    SQLite & AOSS --> Tools
+    Tools --> Strands
     Bedrock <--> Strands
-    Strands --> Guardrails --> UI & Runtime
+    Strands --> Guardrails --> UI & Interfaces
 ```
 
 ---
 
-## ⚡ Key Architectural Innovations
+## 📊 Benchmark Results: OmniContext vs. Standard RAG
 
-1. **Boundary-Aware Tree-sitter AST Chunker**:
-   - Slices code files along true syntactic boundaries (complete functions, classes, and interfaces), guaranteeing zero split-logic hallucinations.
-2. **Cross-Repository Semantic Linker**:
-   - Resolves distributed relationships across repos—automatically connecting frontend HTTP consumer calls (`fetch('/v1/auth/verify')`) to backend endpoint handlers (`@router.post('/v1/auth/verify')`).
-3. **Deterministic Directional Edge Matrix**:
-   - Stores callers and callees in a relational SQLite graph with FTS5 lexical indexing, enabling sub-millisecond blast-radius calculations.
-4. **Model Context Protocol (MCP) Gatekeeper**:
-   - Standardized JSON-RPC tools shield the agent from writing complex SQL or Cypher queries, populating context windows with only the exact semantic slices required.
-5. **AWS Bedrock & Strands Agents Integration**:
-   - Leverages Anthropic Claude 3.5/3.7 Sonnet for multi-step reasoning, Amazon Titan Text Embeddings v2 for vector representations, and Bedrock AgentCore Runtime for containerized serverless hosting.
-6. **Zero-Friction Dual-Mode Design**:
-   - Runs **100% locally with zero cloud credentials** for offline resilience (`ENV=local`), while seamlessly scaling to **Amazon OpenSearch Serverless & Bedrock** (`ENV=aws`) via simple `.env` toggle.
+Tested against the **RepoQA** (needle in a haystack) and **CodeScaleBench** (cross-repo dependency tracing) methodologies:
 
----
-
-## 📊 Quantitative Benchmarks: Naive RAG vs. OmniContext
-
-Evaluated against the **RepoQA** (Search Needle Function) and **CodeScaleBench** (Cross-Repo Tracing) methodologies on our multi-repository testbed:
-
-| Metric | Baseline (Naive String RAG) | OmniContext (Deterministic AST Graph) | Improvement |
+| Metric | Traditional Naive RAG | OmniContext (AST Code Graph) | What This Means |
 | :--- | :--- | :--- | :--- |
-| **Cross-Repo Recall** | `0%` (Fails to link repos) | **`100%` (Exact AST Linkage)** | **+100% Ground Truth** |
-| **Context Overhead** | `~14,500 tokens` | **`~120 tokens`** | **97.6% Token Reduction** |
-| **Hallucinated File Paths** | `42%` | **`0%` (AST Grounded)** | **Zero Hallucination** |
-| **Blast Radius Detection** | Failed (Silent breakage) | **Complete (Caught all consumers)** | **Zero Production Breakage** |
-| **Retrieval Latency** | `~3,400 ms` | **`0.4 ms`** | **8500x Faster** |
+| **Cross-Repo Recall** | `0%` (Fails to link repos) | **`100%`** | OmniContext always catches cross-repo connections. |
+| **Context Overhead** | `~14,500 tokens` | **`~120 tokens`** | **97.6% token reduction**, saving money and time. |
+| **Hallucinated Files** | `42%` | **`0%`** | Grounded in exact compiler AST boundaries. |
+| **Blast Radius Detection** | Failed (Silent production breaks) | **Complete (100% of callers caught)** | Zero unexpected downstream breakages. |
+| **Retrieval Speed** | `~3,400 ms` | **`0.4 ms`** | **8,500x faster** than re-embedding raw text chunks. |
 
 ---
 
-## 🛠️ Getting Started (3-Minute Setup)
+## ☁️ "Built on AWS" Cloud Architecture
 
-### 1. Clone and Install Dependencies
-```bash
-git clone https://github.com/abhayrajjais01/OmniContext.git
-cd OmniContext
+OmniContext is fully integrated with Amazon Web Services:
 
-# Create virtual environment
-python -m venv .venv
-
-# Activate environment
-# On Windows PowerShell:
-.venv\Scripts\Activate.ps1
-# On macOS / Linux:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-```bash
-# Windows:
-copy .env.example .env
-# macOS / Linux:
-cp .env.example .env
-```
-*Note: Defaults to `ENV=local`, which works out-of-the-box with zero AWS credentials.*
-
-### 3. Run Instant Smoke Test
-```bash
-python scripts/smoke_test.py
-```
-
-### 4. Run Quantitative Benchmarks
-```bash
-python evaluation/run_benchmarks.py
-```
-
-### 5. Launch Interactive Telemetry Dashboard
-```bash
-streamlit run ui/app.py
-```
-
----
-
-## ☁️ "Built on AWS" Compliance Details
-
-OmniContext is engineered specifically to maximize points in the **"Built on AWS"** track:
-
-| AWS Component | Service Used | Role in OmniContext |
+| AWS Service | Component Used | Purpose in OmniContext |
 | :--- | :--- | :--- |
-| **Foundation Model** | **Amazon Bedrock (Claude 3.5 / 3.7 Sonnet)** | Autonomous agent reasoning, multi-turn tool planning, and cross-repo migration synthesis. |
-| **Embedding Model** | **Amazon Titan Text Embeddings v2** (`amazon.titan-embed-text-v2:0`) | Generates 1024-dimensional dense vectors for semantic conceptual search. |
-| **Managed Vector Store**| **Amazon OpenSearch Serverless (AOSS)** | Serverless vector index executing hybrid k-NN queries with metadata filtering. |
-| **Agent Framework** | **AWS Strands Agents SDK** | Dynamic model-driven tool execution loop with lifecycle safety guardrails. |
-| **Container Runtime** | **Amazon Bedrock AgentCore Runtime** | Containerized serverless deployment using `BedrockAgentCoreApp` with `@app.entrypoint`. |
-| **Observability** | **Amazon CloudWatch** | Structured logging of tool invocations, token budgets, and traversal latency. |
+| **Amazon Bedrock** | **Anthropic Claude Sonnet 4** (`us.anthropic.claude-sonnet-4-20250514-v1:0`) | Multi-turn reasoning, cross-repository tool orchestration, and migration planning. |
+| **Amazon Bedrock** | **Amazon Titan Text Embeddings v2** (`amazon.titan-embed-text-v2:0`) | Generates 1024-dimensional dense vectors for semantic conceptual search. |
+| **Amazon OpenSearch Serverless** | **AOSS Collection (`omnicontext-code-index`)** | Serverless vector database executing k-NN similarity search over code chunks. |
+| **AWS Strands SDK** | **Agent Loop & Lifecycle Hooks** | Model-driven autonomous execution loop with safety guardrails. |
+| **Amazon Bedrock AgentCore** | **Serverless Container Runtime** | Containerized deployment using `@app.entrypoint` for cloud execution. |
 
 ---
 
 ## 👥 3-Person Team Division of Responsibility
 
-| Role | Lead | Focus Areas | Working Branch |
-| :--- | :--- | :--- | :--- |
-| **Track 1: Infrastructure & Storage** | **Member 1** | SQLite edge matrix, OpenSearch Serverless client, Bedrock Titan v2, Dockerfile, AgentCore wrapper. | `feat/m1-infra-storage` |
-| **Track 2: Ingestion & MCP Server** | **Member 2** | Tree-sitter boundary parser, SCIP cross-repo linker, FastMCP JSON-RPC server, testbed repos. | `feat/m2-mcp-parsing` |
-| **Track 3: Agentic Loop & UI** | **Member 3** | AWS Strands Agent orchestrator, lifecycle guardrails, Streamlit telemetry dashboard, benchmark suite. | `feat/m3-agent-ui` |
+| Track | Owner | Core Responsibilities |
+| :--- | :--- | :--- |
+| **Track 1: Cloud & Storage** | **Member 1** | SQLite relational edge matrix, Amazon OpenSearch Serverless integration, Titan v2 vector store, and AWS cloud deployment. |
+| **Track 2: Parsing & MCP** | **Member 2** | Tree-sitter multi-language AST parser, SCIP cross-repo endpoint linker, FastMCP server, and GitHub repo ingester. |
+| **Track 3: Agent & UI** | **Member 3** | AWS Strands Agent orchestrator, Bedrock Claude Sonnet loop, safety guardrails, Streamlit telemetry dashboard, and benchmarks. |
 
 ---
 
 ## 📄 License
-Apache 2.0 License. Developed for the 2026 WeMakeDevs Bharat Builds Tour Hackathon.
+Distributed under the Apache 2.0 License. Built for the WeMakeDevs Bharat Builds Tour "First Commit" Hackathon 2026.
