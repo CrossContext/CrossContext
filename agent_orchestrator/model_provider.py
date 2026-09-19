@@ -10,18 +10,15 @@ import json
 from typing import Dict, Any, List, Optional
 
 
-class ModelProvider:
-    def __init__(self):
-        self.env = os.getenv("ENV", "local").lower()
-        self.region = os.getenv("AWS_REGION", "us-east-1")
-        self.model_id = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
-        self._bedrock_client = None
+from agent_orchestrator.bedrock_client import BedrockClient
 
-    def _get_bedrock_client(self):
-        if self._bedrock_client is None:
-            import boto3
-            self._bedrock_client = boto3.client("bedrock-runtime", region_name=self.region)
-        return self._bedrock_client
+
+class ModelProvider:
+    def __init__(self, model_id: Optional[str] = None, env: Optional[str] = None):
+        self.env = env or os.getenv("ENV", "local").lower()
+        self.region = os.getenv("AWS_REGION", "us-east-1")
+        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+        self.bedrock = BedrockClient(region_name=self.region)
 
     def invoke_with_tools(
         self,
@@ -32,40 +29,18 @@ class ModelProvider:
         """Invokes Bedrock Claude or falls back to local autonomous simulator."""
         if self.env == "aws":
             try:
-                return self._invoke_bedrock_claude(system_prompt, messages, tools)
+                return self.bedrock.invoke_claude(
+                    system_prompt=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                    model_id=self.model_id
+                )
             except Exception as e:
-                # If AWS fails, gracefully fall back to local simulator
-                print(f"[ModelProvider] AWS Bedrock error ({e}), falling back to local simulator.")
+                # If AWS fails or credentials missing, gracefully fall back to local simulator
+                print(f"[ModelProvider] AWS Bedrock notice ({e}), using local deterministic engine.")
                 return self._simulate_local_reasoning(messages, tools)
         else:
             return self._simulate_local_reasoning(messages, tools)
-
-    def _invoke_bedrock_claude(
-        self,
-        system_prompt: str,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Calls Anthropic Claude on Amazon Bedrock."""
-        client = self._get_bedrock_client()
-
-        # Bedrock Converse API / InvokeModel format
-        payload = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
-            "system": system_prompt,
-            "messages": messages
-        }
-        if tools:
-            payload["tools"] = tools
-
-        response = client.invoke_model(
-            modelId=self.model_id,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(payload)
-        )
-        return json.loads(response["body"].read())
 
     def _simulate_local_reasoning(
         self,

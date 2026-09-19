@@ -53,41 +53,6 @@ interface SystemStats {
   runtime_env: string
 }
 
-interface FilePatch {
-  repo: string
-  file_path: string
-  old_content: string
-  new_content: string
-  unified_diff: string
-  additions: number
-  deletions: number
-}
-
-interface PullRequestSpec {
-  repo: string
-  branch_name: string
-  pr_title: string
-  pr_body: string
-  patches: FilePatch[]
-  cross_linked_prs: string[]
-}
-
-interface DiffResponse {
-  status: string
-  query: string
-  total_repositories: number
-  total_files_affected: number
-  total_additions: number
-  total_deletions: number
-  pull_requests: PullRequestSpec[]
-  blast_radius_summary: {
-    producer_repo: string
-    consumer_repos: string[]
-    total_callers_updated: number
-    zero_breakage_verified: boolean
-  }
-}
-
 // ── Default constants ────────────────────────────────────────────────────────
 
 const REPO_COLORS: Record<string, { main: string; bg: string; border: string }> = {
@@ -350,7 +315,7 @@ function CrossRepoGraph({
             boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <span>🚨 BLAST RADIUS:</span>
+            <span>BLAST RADIUS:</span>
             <span>{directCallers.size} upstream consumers affected across repositories</span>
           </div>
         )}
@@ -674,7 +639,7 @@ function CrossRepoGraph({
           </span>
         ))}
         <span style={{ marginLeft: 'auto', color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-          {visibleNodes.length} symbols • {visibleEdges.length} edges • ✥ 2D Pan & Zoom Active
+          {visibleNodes.length} symbols • {visibleEdges.length} edges • 2D Pan & Zoom Active
         </span>
       </div>
     </div>
@@ -696,224 +661,6 @@ const hudBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-// ── Cross-Repo Diff & PR Review Drawer ────────────────────────────────────────
-
-function CrossRepoDiffDrawer({
-  open,
-  onClose,
-  diffData,
-}: {
-  open: boolean
-  onClose: () => void
-  diffData: DiffResponse | null
-}) {
-  const [activeRepoIndex, setActiveRepoIndex] = useState(0)
-  const [copied, setCopied] = useState(false)
-  const [dispatched, setDispatched] = useState(false)
-
-  if (!open || !diffData) return null
-
-  const activePR = diffData.pull_requests[activeRepoIndex] || diffData.pull_requests[0]
-  const patch = activePR?.patches[0]
-
-  const copyPRSpec = () => {
-    if (!activePR) return
-    const text = `# ${activePR.pr_title}\n\nBranch: ${activePR.branch_name}\n\n${activePR.pr_body}`
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleSimulateDispatch = () => {
-    setDispatched(true)
-    setTimeout(() => setDispatched(false), 4000)
-  }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 680, maxWidth: '90vw',
-        background: 'white', borderLeft: '1px solid var(--color-border)',
-        zIndex: 70, display: 'flex', flexDirection: 'column',
-        boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
-      }}>
-        {/* Drawer Header */}
-        <div style={{
-          padding: '14px 18px', borderBottom: '1px solid var(--color-border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'var(--color-surface)', flexShrink: 0,
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: '#111', color: 'white', padding: '1px 6px', borderRadius: 2, fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                ONE-CLICK DUAL PR
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#111', fontFamily: 'var(--font-mono)' }}>
-                Cross-Repository Synchronized Diffs
-              </span>
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>
-              {diffData.total_repositories} repositories • {diffData.total_files_affected} files • +{diffData.total_additions} -{diffData.total_deletions} lines
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: '1px solid var(--color-border)',
-              color: 'var(--color-text-muted)', cursor: 'pointer',
-              fontSize: 11, width: 24, height: 24, borderRadius: 2,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Repository PR Tabs */}
-        <div style={{
-          display: 'flex', background: 'white', borderBottom: '1px solid var(--color-border)',
-          padding: '0 12px', gap: 4, flexShrink: 0, overflowX: 'auto',
-        }}>
-          {diffData.pull_requests.map((pr, idx) => {
-            const isProducer = pr.repo.includes('auth') || pr.repo.includes('core')
-            const active = activeRepoIndex === idx
-            return (
-              <button
-                key={pr.repo}
-                onClick={() => setActiveRepoIndex(idx)}
-                style={{
-                  padding: '9px 12px', border: 'none', background: 'transparent',
-                  fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-                  borderBottom: active ? '2px solid #111' : '2px solid transparent',
-                  color: active ? '#111' : 'var(--color-text-muted)',
-                  fontWeight: active ? 700 : 400, display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <span>{pr.repo.replace('repo_', '')}</span>
-                <span style={{
-                  fontSize: 9, padding: '0 4px', borderRadius: 2,
-                  background: isProducer ? '#fff7ed' : '#eff6ff',
-                  color: isProducer ? '#ea580c' : '#2563eb',
-                  border: `1px solid ${isProducer ? '#fdba74' : '#93c5fd'}`,
-                }}>
-                  {isProducer ? 'PRODUCER' : 'CONSUMER'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* PR Details & Diff Viewer */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* PR Metadata Card */}
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 3, padding: '12px 14px', fontFamily: 'var(--font-mono)',
-          }}>
-            <div style={{ fontSize: 10, color: 'var(--color-text-dim)', marginBottom: 2 }}>
-              PULL REQUEST SPECIFICATION
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 6 }}>
-              {activePR.pr_title}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 10, color: 'var(--color-text-muted)' }}>
-              <div><span style={{ color: 'var(--color-text-dim)' }}>Branch:</span> <code>{activePR.branch_name}</code></div>
-              <div><span style={{ color: 'var(--color-text-dim)' }}>File:</span> <code>{patch?.file_path}</code></div>
-              <div><span style={{ color: '#16a34a', fontWeight: 600 }}>+{patch?.additions}</span> / <span style={{ color: '#dc2626', fontWeight: 600 }}>-{patch?.deletions}</span></div>
-            </div>
-
-            {activePR.cross_linked_prs.length > 0 && (
-              <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px dashed var(--color-border)', fontSize: 10 }}>
-                <span style={{ color: 'var(--color-text-dim)' }}>Cross-Linked Pull Requests: </span>
-                {activePR.cross_linked_prs.map(p => (
-                  <span key={p} style={{ background: '#eff6ff', color: '#2563eb', padding: '1px 5px', borderRadius: 2, marginRight: 4, fontWeight: 600 }}>
-                    {p}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Unified Diff Box */}
-          <div>
-            <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)',
-              marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span>UNIFIED GIT PATCH ({patch?.file_path})</span>
-              <span style={{ color: 'var(--color-text-dim)' }}>Tree-Sitter Syntax Aligned</span>
-            </div>
-            <div style={{
-              background: '#0d1117', color: '#c9d1d9', borderRadius: 3,
-              padding: '12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              overflowX: 'auto', lineHeight: 1.5,
-            }}>
-              {(patch?.unified_diff || '').split('\n').map((line, lineIdx) => {
-                let color = '#c9d1d9'
-                let bg = 'transparent'
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                  color = '#7ee787'
-                  bg = 'rgba(46, 160, 67, 0.15)'
-                } else if (line.startsWith('-') && !line.startsWith('---')) {
-                  color = '#ffa198'
-                  bg = 'rgba(248, 81, 73, 0.15)'
-                } else if (line.startsWith('@@')) {
-                  color = '#79c0ff'
-                  bg = 'rgba(56, 139, 253, 0.1)'
-                } else if (line.startsWith('---') || line.startsWith('+++')) {
-                  color = '#d2a8ff'
-                }
-
-                return (
-                  <div key={lineIdx} style={{ background: bg, color: color, padding: '0 4px', whiteSpace: 'pre' }}>
-                    {line || ' '}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div style={{
-          padding: '12px 18px', borderTop: '1px solid var(--color-border)',
-          background: 'white', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          {dispatched ? (
-            <div style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-              ✓ Coordinated PRs #89 and #48 dispatched with atomic commit signatures!
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={copyPRSpec}
-                style={{
-                  padding: '7px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: 'white', border: '1px solid var(--color-border-bright)',
-                  borderRadius: 2, cursor: 'pointer', color: '#111',
-                }}
-              >
-                {copied ? '✓ Copied!' : '📋 Copy PR Spec'}
-              </button>
-              <button
-                onClick={handleSimulateDispatch}
-                style={{
-                  flex: 1, padding: '7px 0', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: '#111', border: 'none', borderRadius: 2,
-                  color: 'white', cursor: 'pointer', fontWeight: 700,
-                }}
-              >
-                ⚡ Dispatch Synchronized PRs to GitHub
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
-
 // ── Agent Panel ───────────────────────────────────────────────────────────────
 
 function AgentPanel({
@@ -922,21 +669,18 @@ function AgentPanel({
   orgUrl,
   repoName,
   engineConfig,
-  onOpenDiffs,
 }: {
   onNodeSelect: (id: string | null) => void
   selectedNode: string | null
   orgUrl: string
   repoName: string
   engineConfig: EngineConfig
-  onOpenDiffs: (diffs: DiffResponse) => void
 }) {
   const [query, setQuery] = useState('Deprecate /v1/auth/verify endpoint and migrate all frontend consumers to /v2/auth/token')
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<AgentStep[]>([])
   const [response, setResponse] = useState('')
   const [totalTokens, setTotalTokens] = useState(0)
-  const [diffsAvailable, setDiffsAvailable] = useState<DiffResponse | null>(null)
   const stepsRef = useRef<HTMLDivElement>(null)
 
   const runAgent = async () => {
@@ -945,7 +689,6 @@ function AgentPanel({
     setSteps([])
     setResponse('')
     setTotalTokens(0)
-    setDiffsAvailable(null)
 
     try {
       const res = await fetch('http://localhost:8000/api/agent/run', {
@@ -975,18 +718,6 @@ function AgentPanel({
         setSteps(genSteps)
         setTotalTokens(data.telemetry?.approx_tokens_used || 101)
         setResponse(data.response || 'Plan formulated deterministically across multi-repo AST knowledge graph.')
-
-        // Fetch synthesized diffs
-        const diffRes = await fetch('http://localhost:8000/api/agent/diffs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query })
-        })
-        if (diffRes.ok) {
-          const diffJson = await diffRes.json()
-          setDiffsAvailable(diffJson)
-        }
-
         setRunning(false)
         return
       }
@@ -1116,7 +847,7 @@ function AgentPanel({
         )}
       </div>
 
-      {/* Response Plan & One-Click Dual PR Trigger */}
+      {/* Response Plan Output */}
       {response && (
         <div style={{
           padding: '12px 14px', borderTop: '1px solid var(--color-border)',
@@ -1126,18 +857,6 @@ function AgentPanel({
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 1 }}>
               SYNTHESIZED PLAN ({totalTokens} tokens)
             </span>
-            {diffsAvailable && (
-              <button
-                onClick={() => onOpenDiffs(diffsAvailable)}
-                style={{
-                  background: '#111', color: 'white', border: 'none',
-                  padding: '3px 8px', borderRadius: 2, fontSize: 10,
-                  fontFamily: 'var(--font-mono)', cursor: 'pointer', fontWeight: 700,
-                }}
-              >
-                ⚡ Review Dual PR Diffs
-              </button>
-            )}
           </div>
           <div style={{ color: '#111', fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{response}</div>
         </div>
@@ -1541,7 +1260,7 @@ function CodeExplorerView({ repos }: { repos: string[] }) {
                 borderLeft: f === selectedFile ? '2px solid #111' : '2px solid transparent',
               }}
             >
-              📄 {f}
+              {f}
             </div>
           ))}
         </div>
@@ -1648,7 +1367,7 @@ function IngestModal({
       })
       const data = await res.json()
       if (data.status === 'success') {
-        setStatusMsg(`✓ Successfully indexed ${data.indexed_nodes} symbols across ${data.repositories.length} repos!`)
+        setStatusMsg(`Successfully indexed ${data.indexed_nodes} symbols across ${data.repositories.length} repos!`)
         setTimeout(() => {
           setLoading(false)
           onIngestSuccess()
@@ -1675,7 +1394,7 @@ function IngestModal({
       }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111' }}>
-            📥 Ingest Dynamic GitHub Codebase
+            Ingest Dynamic GitHub Codebase
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer' }}>✕</button>
         </div>
@@ -2048,7 +1767,6 @@ export default function App() {
   const [ingestModalOpen, setIngestModalOpen] = useState(false)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [engineConfig, setEngineConfig] = useState<EngineConfig>(DEFAULT_ENGINE)
-  const [diffDrawerData, setDiffDrawerData] = useState<DiffResponse | null>(null)
 
   // Live state from backend
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>(FALLBACK_NODES)
@@ -2278,7 +1996,6 @@ export default function App() {
                   orgUrl={orgUrl}
                   repoName={repoName}
                   engineConfig={engineConfig}
-                  onOpenDiffs={setDiffDrawerData}
                 />
               </div>
             </div>
@@ -2332,13 +2049,6 @@ export default function App() {
         open={ingestModalOpen}
         onClose={() => setIngestModalOpen(false)}
         onIngestSuccess={loadData}
-      />
-
-      {/* Cross-Repo Diffs & Synchronized PR Drawer */}
-      <CrossRepoDiffDrawer
-        open={diffDrawerData !== null}
-        onClose={() => setDiffDrawerData(null)}
-        diffData={diffDrawerData}
       />
 
       {/* Engine Settings Drawer */}
