@@ -5,7 +5,11 @@ and labeled edges for the hackathon dashboard.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from streamlit_agraph import agraph, Node, Edge, Config
+try:
+    from streamlit_agraph import agraph, Node, Edge, Config
+    AGRAPH_AVAILABLE = True
+except ImportError:
+    AGRAPH_AVAILABLE = False
 
 
 # Color palette: each repository gets a distinct, accessible color
@@ -151,6 +155,11 @@ def render_graph(
     height: int = 500,
 ):
     """Renders the interactive graph directly into the Streamlit app."""
+    import streamlit as st
+    if not AGRAPH_AVAILABLE:
+        st.info("Interactive agraph unavailable. Visualizing symbols in table below.")
+        return
+
     ag_nodes, ag_edges, config = build_agraph(
         nodes_data, edges_data, selected_repo=selected_repo, height=height
     )
