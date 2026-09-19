@@ -27,6 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from common.models import SymbolType, EdgeType
 from agent_orchestrator.agent import OmniContextAgent
+from agent_orchestrator.diff_generator import CrossRepoDiffGenerator
 from mcp_server.ingestion.github_ingester import GitHubRepoIngester
 from evaluation.repoqa_bench import run_repoqa_benchmark
 from evaluation.codescale_bench import run_codescale_benchmark
@@ -42,10 +43,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Agent & Graph Store
+# Initialize Agent, Graph Store & Diff Generator
 agent = OmniContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
 store = agent.tool_manager.graph_store
 ingester = GitHubRepoIngester()
+diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
 
 # Ensure default testbed is indexed on startup if empty
 def _bootstrap():
@@ -209,6 +211,16 @@ async def run_agent(req: AgentRunRequest):
         "elapsed_ms": elapsed_ms,
         "event_log": telemetry_logs,
     }
+
+
+@app.post("/api/agent/diffs")
+def generate_cross_repo_diffs(req: AgentRunRequest):
+    """Generates unified synchronized git diffs and PR specifications across repositories."""
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    res = diff_generator.synthesize_cross_repo_patches(req.query)
+    return res
 
 
 @app.post("/api/repos/ingest")
