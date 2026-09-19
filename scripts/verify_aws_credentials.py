@@ -82,30 +82,60 @@ def verify_aws():
         print(f"Request access for '{embedding_model}'. (Approval is usually instant).")
 
     # 4. Check Amazon Bedrock Claude Sonnet Access
-    claude_model = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
-    print(f"\n[3/4] Testing Bedrock Foundation Model ({claude_model})... ", end="")
-    try:
-        claude_payload = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 100,
-            "messages": [
-                {"role": "user", "content": "Respond with the single word: READY"}
-            ]
-        }
-        res = bedrock_runtime.invoke_model(
-            modelId=claude_model,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(claude_payload)
-        )
-        body = json.loads(res["body"].read())
-        reply = body.get("content", [{}])[0].get("text", "").strip()
-        print(f"OK (Response: '{reply}')")
-    except Exception as e:
-        print(f"FAIL\n      Error: {e}")
-        print("\n[Action Required]: Bedrock Model Access for Anthropic Claude.")
-        print(f"Go to AWS Console -> Amazon Bedrock (Region: {region}) -> 'Model Access'.")
-        print(f"Request access for 'Anthropic Claude 3.5 Sonnet' / 'Claude 3.7 Sonnet'.")
+    env_claude_model = os.getenv("BEDROCK_MODEL_ID", "")
+    candidate_models = []
+    if env_claude_model:
+        candidate_models.append(env_claude_model)
+    # Common Sonnet 4.5 and Sonnet 4 model identifiers (direct and cross-region inference profiles)
+    candidate_models.extend([
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    ])
+
+    print(f"\n[3/4] Testing Bedrock Claude Sonnet...")
+    claude_success = False
+    working_model = None
+
+    for model_id in candidate_models:
+        print(f"      Trying '{model_id}'... ", end="")
+        try:
+            claude_payload = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 50,
+                "messages": [
+                    {"role": "user", "content": "Respond with the single word: READY"}
+                ]
+            }
+            res = bedrock_runtime.invoke_model(
+                modelId=model_id,
+                contentType="application/json",
+                accept="application/json",
+                body=json.dumps(claude_payload)
+            )
+            body = json.loads(res["body"].read())
+            reply = body.get("content", [{}])[0].get("text", "").strip()
+            print(f"SUCCESS! (Response: '{reply}')")
+            claude_success = True
+            working_model = model_id
+            break
+        except Exception as e:
+            err_msg = str(e)
+            if "AccessDeniedException" in err_msg:
+                print("AccessDenied")
+            elif "ResourceNotFoundException" in err_msg or "ValidationException" in err_msg:
+                print("Not available with this ID")
+            else:
+                print(f"Error: {e}")
+
+    if claude_success and working_model:
+        print(f"      --> ACTIVE SONNET MODEL: {working_model}")
+        print(f"      Make sure your .env has: BEDROCK_MODEL_ID={working_model}")
+    else:
+        print("\n[Action Required]: Click on 'Claude Sonnet 4.5' in the Bedrock console to view its exact Model ID / Inference Profile ID.")
 
     # 5. Check OpenSearch Serverless (AOSS)
     aoss_endpoint = os.getenv("AOSS_ENDPOINT", "")
