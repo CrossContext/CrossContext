@@ -2,9 +2,10 @@
 CrossContext - Organization Context & AI Blueprint Generator
 Analyzes the cross-repository code graph to generate:
 1. A visually rich architecture report with dependency metrics for humans.
-2. An ultra-compressed, token-optimized context document (.txt) tailored
+2. An ultra-compressed, token-optimized context document (.txt / .md) tailored
    specifically for IDEs (Cursor, Claude Code, Windsurf) to give agents
    instant multi-repo awareness without burning token budgets.
+3. Machine-readable JSON specifications for cross-repo synchronization.
 """
 
 from typing import Dict, Any, List, Optional
@@ -70,6 +71,8 @@ class OrgContextGenerator:
                         "callee_file": callee_node.file_path,
                         "callee_symbol": callee_node.symbol_name,
                         "edge_type": str(edge_type),
+                        "route": (caller_node.metadata or {}).get("consumes_endpoint") or (callee_node.metadata or {}).get("endpoint_route") or "",
+                        "http_method": (caller_node.metadata or {}).get("consumes_http_method") or (callee_node.metadata or {}).get("http_method") or "GET",
                     })
                     repo_dependencies[caller_node.repo][callee_node.repo] += 1
                 else:
@@ -136,14 +139,15 @@ class OrgContextGenerator:
         lines.extend([
             "",
             "## 2. CROSS-REPOSITORY API CONTRACT MATRIX",
-            "# Format: [Consumer Repo/File] -> (Relationship) -> [Producer Repo/File: Symbol]",
+            "# Format: [Consumer Repo/File] -> (Relationship [Route:Method]) -> [Producer Repo/File: Symbol]",
         ])
 
         if data["cross_repo_contracts"]:
             for c in data["cross_repo_contracts"]:
+                route_str = f" [{c['http_method']} {c['route']}]" if c.get("route") else ""
                 lines.append(
                     f"- [{c['caller_repo']}] {c['caller_file']} ({c['caller_symbol']}) "
-                    f"--{c['edge_type']}--> "
+                    f"--{c['edge_type']}{route_str}--> "
                     f"[{c['callee_repo']}] {c['callee_file']}: `{c['callee_symbol']}`"
                 )
         else:

@@ -1,5 +1,5 @@
 # ===================================================================
-# OMNICONTEXT FEDERATED ORGANIZATION CODEBASE BLUEPRINT
+# CROSSCONTEXT FEDERATED ORGANIZATION CODEBASE BLUEPRINT
 # Generated for Autonomous AI Agents | Total Repositories: 3
 # ===================================================================
 
@@ -10,12 +10,12 @@
 - Repo: `repo_shared_sdk` (Python) | Files: 2 | Symbols: 6
 
 ## 2. CROSS-REPOSITORY API CONTRACT MATRIX
-# Format: [Consumer Repo/File] -> (Relationship) -> [Producer Repo/File: Symbol]
-- [repo_frontend_portal] src/api/authClient.ts (verifySessionToken) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
-- [repo_frontend_portal] src/api/authClient.ts (loginWithCredentials) --consumes_api--> [repo_auth_core] main.py: `create_token_v1`
-- [repo_frontend_portal] src/services/authClient.ts (verifyUserSession) --consumes_api--> [repo_auth_core] src/api/auth.py: `verify_legacy_auth`
-- [repo_shared_sdk] auth_sdk/client.py (AuthCoreClient) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
-- [repo_shared_sdk] auth_sdk/client.py (verify_token) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
+# Format: [Consumer Repo/File] -> (Relationship [Route:Method]) -> [Producer Repo/File: Symbol]
+- [repo_frontend_portal] src/api/authClient.ts (verifySessionToken) --consumes_api [GET /v1/auth/verify]--> [repo_auth_core] main.py: `verify_auth_v1`
+- [repo_frontend_portal] src/api/authClient.ts (loginWithCredentials) --consumes_api [POST /v1/auth/token]--> [repo_auth_core] main.py: `create_token_v1`
+- [repo_frontend_portal] src/services/authClient.ts (verifyUserSession) --consumes_api [POST /api/v1/auth/verify]--> [repo_auth_core] src/api/auth.py: `verify_legacy_auth`
+- [repo_shared_sdk] auth_sdk/client.py (AuthCoreClient) --consumes_api [GET /v1/auth/verify]--> [repo_auth_core] main.py: `verify_auth_v1`
+- [repo_shared_sdk] auth_sdk/client.py (verify_token) --consumes_api [GET /v1/auth/verify]--> [repo_auth_core] main.py: `verify_auth_v1`
 
 ## 3. DETERMINISTIC SYMBOL MAP & AST BOUNDARIES
 # Use this index to locate exact functions/classes without full-repo scans.
