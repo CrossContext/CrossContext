@@ -1,5 +1,5 @@
 """
-OmniContext - CodeScaleBench Cross-Repo Dependency Tracing Benchmark (Modular)
+CrossContext - CodeScaleBench Cross-Repo Dependency Tracing Benchmark (Modular)
 Evaluates the engine's ability to trace all downstream consumers of an API endpoint
 across repository boundaries — the core competency that naive RAG cannot achieve.
 """
@@ -25,7 +25,7 @@ def run_codescale_benchmark(
     """
     CodeScaleBench Cross-Repo Dependency Tracing Benchmark.
 
-    Tests whether OmniContext can deterministically trace API endpoint deprecations
+    Tests whether CrossContext can deterministically trace API endpoint deprecations
     across distributed repositories, detecting ALL upstream consumers that would break.
     """
     start = time.time()

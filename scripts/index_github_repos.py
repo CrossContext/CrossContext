@@ -1,6 +1,6 @@
 """
-OmniContext - CLI Script to Ingest Dynamic GitHub Repositories
-Clones, parses, and indexes real GitHub repositories into the OmniContext knowledge graph.
+CrossContext - CLI Script to Ingest Dynamic GitHub Repositories
+Clones, parses, and indexes real GitHub repositories into the CrossContext knowledge graph.
 Usage:
     python scripts/index_github_repos.py https://github.com/owner/repo1 https://github.com/owner/repo2
 """
@@ -17,13 +17,13 @@ from mcp_server.ingestion.github_ingester import GitHubRepoIngester
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest real GitHub repositories into OmniContext")
+    parser = argparse.ArgumentParser(description="Ingest real GitHub repositories into CrossContext")
     parser.add_argument("repos", nargs="+", help="GitHub repository URLs or local directory paths")
-    parser.add_argument("--db-path", default="data/omnicontext_graph.db", help="Path to SQLite graph database")
+    parser.add_argument("--db-path", default="data/crosscontext_graph.db", help="Path to SQLite graph database")
     args = parser.parse_args()
 
     print("==================================================")
-    print("   OmniContext Dynamic GitHub Repository Ingester  ")
+    print("   CrossContext Dynamic GitHub Repository Ingester  ")
     print("==================================================")
     print(f"Target Repositories ({len(args.repos)}):")
     for r in args.repos:

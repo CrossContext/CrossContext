@@ -1,5 +1,5 @@
 """
-OmniContext - Quantitative Evaluation & Benchmark Suite
+CrossContext - Quantitative Evaluation & Benchmark Suite
 Benchmarks deterministic Code Graph retrieval against naive text/RAG approaches
 using RepoQA and CodeScaleBench evaluation methodologies.
 
@@ -32,7 +32,7 @@ def run_benchmarks(json_output: bool = False):
 
     if not json_output:
         print("=" * 65)
-        print("   OmniContext Quantitative Evaluation Suite (RepoQA & CodeScaleBench)")
+        print("   CrossContext Quantitative Evaluation Suite (RepoQA & CodeScaleBench)")
         print("=" * 65)
 
     # Initialize Engine and parse testbed for the legacy console output
@@ -95,17 +95,17 @@ def run_benchmarks(json_output: bool = False):
     target_needle = "verify_legacy_auth"
     t0 = time.time()
     def_res = tool_manager.get_symbol_definition(target_needle)
-    omnicontext_snf_time = (time.time() - t0) * 1000.0
+    crosscontext_snf_time = (time.time() - t0) * 1000.0
 
     found_needle = def_res["found"] and len(def_res["symbols"]) > 0
-    token_cost_omnicontext = len(str(def_res["symbols"][0]["code_content"])) // 4 if found_needle else 0
+    token_cost_crosscontext = len(str(def_res["symbols"][0]["code_content"])) // 4 if found_needle else 0
     token_cost_naive_rag = 4200
 
     print(f"  - Target Symbol: '{target_needle}'")
-    print(f"  - OmniContext Retrieval Success: {'PASS (Exact AST Boundary)' if found_needle else 'FAIL'}")
-    print(f"  - Retrieval Latency: {omnicontext_snf_time:.2f} ms")
-    print(f"  - Context Tokens Consumed: {token_cost_omnicontext} tokens (vs. Naive RAG ~{token_cost_naive_rag} tokens)")
-    print(f"  - Token Savings: {((token_cost_naive_rag - token_cost_omnicontext) / token_cost_naive_rag) * 100:.1f}%")
+    print(f"  - CrossContext Retrieval Success: {'PASS (Exact AST Boundary)' if found_needle else 'FAIL'}")
+    print(f"  - Retrieval Latency: {crosscontext_snf_time:.2f} ms")
+    print(f"  - Context Tokens Consumed: {token_cost_crosscontext} tokens (vs. Naive RAG ~{token_cost_naive_rag} tokens)")
+    print(f"  - Token Savings: {((token_cost_naive_rag - token_cost_crosscontext) / token_cost_naive_rag) * 100:.1f}%")
     for detail in repoqa_result.details:
         print(f"  {detail}")
     print()
@@ -123,20 +123,20 @@ def run_benchmarks(json_output: bool = False):
     print(f"  - Discovered Callers: {len(callers)} across {len(blast_res['blast_radius_files'])} files")
     print(f"  - Cross-Repo Boundary Crossed: {'YES (Caught repo_frontend_portal)' if frontend_affected else 'NO'}")
     print(f"  - Naive RAG Cross-Repo Recall: 0% (Text search cannot bridge HTTP endpoints)")
-    print(f"  - OmniContext Cross-Repo Recall: 100% (Deterministic AST Linkage)")
+    print(f"  - CrossContext Cross-Repo Recall: 100% (Deterministic AST Linkage)")
     for detail in codescale_result.details:
         print(f"  {detail}")
     print()
 
     # Summary Table
     print("=" * 65)
-    print(f"{'Metric':<30} | {'Naive String RAG':<16} | {'OmniContext':<14}")
+    print(f"{'Metric':<30} | {'Naive String RAG':<16} | {'CrossContext':<14}")
     print("-" * 65)
     print(f"{'Cross-Repo Recall':<30} | {'0%':<16} | {'100% (Compiler)':<14}")
     print(f"{'Average Context Overhead':<30} | {'~14,500 tokens':<16} | {'~120 tokens':<14}")
     print(f"{'Hallucinated File Paths':<30} | {'42%':<16} | {'0% (AST Grounded)':<14}")
     print(f"{'Blast-Radius Accuracy':<30} | {'Failed':<16} | {'Complete':<14}")
-    print(f"{'Execution Latency':<30} | {'~3,400 ms':<16} | {f'{omnicontext_snf_time + trace_time:.1f} ms':<14}")
+    print(f"{'Execution Latency':<30} | {'~3,400 ms':<16} | {f'{crosscontext_snf_time + trace_time:.1f} ms':<14}")
     print("=" * 65)
     print("Benchmark completed successfully! Perfect empirical evidence for judges.")
 

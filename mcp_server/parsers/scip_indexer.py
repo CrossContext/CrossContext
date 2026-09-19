@@ -74,27 +74,36 @@ class CrossRepoLinker:
             # 3. Cross-repo SDK / function calls (Requires resolvable import or client receiver)
             if node.code_content:
                 file_imports = node.metadata.get("file_imports", [])
-                for sym_name, targets in nodes_by_name.items():
-                    if sym_name != node.symbol_name and len(sym_name) > 3:
-                        # Check if function is called with client prefix e.g. client.verify_token() or defaultAuthClient.verifyUserSession()
-                        is_explicit_call = bool(re.search(r'\b[a-zA-Z0-9_]*(?:Client|Service|SDK)\.' + re.escape(sym_name) + r'\(', node.code_content))
-                        # Or if caller file explicitly imports the target module or target symbol name
-                        is_imported_call = bool(file_imports and any(sym_name in imp or any(t.file_path in imp for t in targets) for imp in file_imports))
+                tokens = set(re.findall(r'\b[a-zA-Z0-9_]{4,}\b', node.code_content))
+                candidate_names = tokens.intersection(nodes_by_name.keys())
 
-                        if is_explicit_call or is_imported_call:
-                            for target in targets:
-                                if target.repo != node.repo and target.symbol_type in (SymbolType.FUNCTION, SymbolType.METHOD):
-                                    cross_edges.append(CodeEdge(
-                                        caller_id=node.id,
-                                        callee_id=target.id,
-                                        edge_type=EdgeType.CALLS,
-                                        confidence=0.95,
-                                        metadata={
-                                            "symbol": sym_name,
-                                            "caller_repo": node.repo,
-                                            "target_repo": target.repo,
-                                        }
-                                    ))
+                for sym_name in candidate_names:
+                    if sym_name == node.symbol_name:
+                        continue
+                    targets = nodes_by_name[sym_name]
+                    # Filter for targets in other repositories with function/method type
+                    external_targets = [t for t in targets if t.repo != node.repo and t.symbol_type in (SymbolType.FUNCTION, SymbolType.METHOD)]
+                    if not external_targets:
+                        continue
+
+                    # Check if function is called with client prefix e.g. client.verify_token() or defaultAuthClient.verifyUserSession()
+                    is_explicit_call = bool(re.search(r'\b[a-zA-Z0-9_]*(?:Client|Service|SDK)\.' + re.escape(sym_name) + r'\(', node.code_content))
+                    # Or if caller file explicitly imports the target module or target symbol name
+                    is_imported_call = bool(file_imports and any(sym_name in imp or any(t.file_path in imp for t in external_targets) for imp in file_imports))
+
+                    if is_explicit_call or is_imported_call:
+                        for target in external_targets:
+                            cross_edges.append(CodeEdge(
+                                caller_id=node.id,
+                                callee_id=target.id,
+                                edge_type=EdgeType.CALLS,
+                                confidence=0.95,
+                                metadata={
+                                    "symbol": sym_name,
+                                    "caller_repo": node.repo,
+                                    "target_repo": target.repo,
+                                }
+                            ))
 
         return cross_edges
 

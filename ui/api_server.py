@@ -1,4 +1,4 @@
-"""OmniContext / CrossContext - Backend API Server.
+"""CrossContext / CrossContext - Backend API Server.
 
 Serves REST APIs for the React/Figma Web UI and mounts the compiled frontend.
 Connects the interactive CrossContext web client to the deterministic AST code graph,
@@ -26,9 +26,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from common.models import SymbolType, EdgeType
-from agent_orchestrator.agent import OmniContextAgent
+from agent_orchestrator.agent import CrossContextAgent
 from agent_orchestrator.diff_generator import CrossRepoDiffGenerator
 from mcp_server.ingestion.github_ingester import GitHubRepoIngester
+from mcp_server.context_generator import OrgContextGenerator
 from evaluation.repoqa_bench import run_repoqa_benchmark
 from evaluation.codescale_bench import run_codescale_benchmark
 
@@ -44,7 +45,7 @@ app.add_middleware(
 )
 
 # Initialize Agent, Graph Store & Diff Generator
-agent = OmniContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
+agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
 store = agent.tool_manager.graph_store
 ingester = GitHubRepoIngester()
 diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
@@ -237,6 +238,67 @@ def ingest_repositories(req: IngestRequest):
     return res
 
 
+class DiscoverOrgRequest(BaseModel):
+    org: str
+
+
+@app.post("/api/repos/discover-org")
+def discover_org_repositories(req: DiscoverOrgRequest):
+    """Discovers public repositories for any GitHub organization or profile URL."""
+    if not req.org.strip():
+        raise HTTPException(status_code=400, detail="Organization or profile identifier is required")
+    urls = GitHubRepoIngester.fetch_organization_repos(req.org.strip())
+    return {
+        "org": req.org,
+        "count": len(urls),
+        "repositories": urls,
+    }
+
+
+@app.get("/api/org/blueprint")
+def get_org_blueprint():
+    """Generates visual architecture metrics and raw AI-optimized context for IDEs."""
+    generator = OrgContextGenerator(store)
+    analysis = generator.analyze_organization()
+    ai_context = generator.generate_ai_optimized_context()
+    return {
+        "analysis": analysis,
+        "ai_context": ai_context,
+        "approx_tokens": len(ai_context) // 4,
+    }
+
+
+@app.get("/api/file/content")
+def get_file_content(repo: str, file_path: str):
+    """Reads source file content from disk for indexed repositories."""
+    candidates = [
+        PROJECT_ROOT / file_path,
+        PROJECT_ROOT / "testbed" / repo / file_path,
+        PROJECT_ROOT / "data" / "repos" / repo / file_path,
+        Path(file_path),
+    ]
+    for cand in candidates:
+        if cand.is_file():
+            try:
+                content = cand.read_text(encoding="utf-8", errors="replace")
+                return {
+                    "repo": repo,
+                    "file_path": file_path,
+                    "found": True,
+                    "content": content,
+                    "total_lines": len(content.splitlines()),
+                }
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "repo": repo,
+        "file_path": file_path,
+        "found": False,
+        "content": "",
+        "total_lines": 0,
+    }
+
+
 @app.get("/api/benchmarks")
 def get_benchmarks():
     """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics."""
@@ -262,7 +324,7 @@ def get_benchmarks():
         },
         "summary_table": [
             {"metric": "Cross-Repo Recall", "rag": "0%", "omni": "100%", "delta": "+100%"},
-            {"metric": "Context Tokens", "rag": f"{res1.metrics.get('naive_rag_tokens_estimate', 14500):,}", "omni": f"{res1.metrics.get('omnicontext_tokens', 120):,}", "delta": f"{res1.metrics.get('token_reduction_pct', 97.6)}% reduction"},
+            {"metric": "Context Tokens", "rag": f"{res1.metrics.get('naive_rag_tokens_estimate', 14500):,}", "omni": f"{res1.metrics.get('crosscontext_tokens', 120):,}", "delta": f"{res1.metrics.get('token_reduction_pct', 97.6)}% reduction"},
             {"metric": "Hallucinated File Paths", "rag": "42%", "omni": "0%", "delta": "Zero"},
             {"metric": "Blast Radius Detection", "rag": "Failed", "omni": "Complete", "delta": "Zero breakage"},
             {"metric": "Retrieval Latency", "rag": "3,400 ms", "omni": f"{round(res1.execution_time_ms / max(res1.metrics.get('tests_total', 1), 1), 2)} ms", "delta": "High Speed"},
@@ -275,8 +337,14 @@ DIST_PATH = PROJECT_ROOT / "ui_react" / "dist"
 if DIST_PATH.is_dir():
     app.mount("/assets", StaticFiles(directory=str(DIST_PATH / "assets")), name="assets")
 
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(str(DIST_PATH / "index.html"))
+
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
         file_path = DIST_PATH / full_path
         if file_path.is_file():
             return FileResponse(str(file_path))

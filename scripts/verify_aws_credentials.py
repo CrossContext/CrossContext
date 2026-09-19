@@ -1,5 +1,5 @@
 """
-OmniContext - AWS Credentials & Bedrock Model Access Verification Script
+CrossContext - AWS Credentials & Bedrock Model Access Verification Script
 Run this script after configuring your AWS credentials in .env to verify:
 1. AWS IAM Credentials validity (STS GetCallerIdentity)
 2. Amazon Bedrock Runtime access for Anthropic Claude 3.5 / 3.7 Sonnet
@@ -28,7 +28,7 @@ except ImportError:
 
 def verify_aws():
     print("==================================================")
-    print("   OmniContext AWS Cloud Readiness Verification   ")
+    print("   CrossContext AWS Cloud Readiness Verification   ")
     print("==================================================")
 
     region = os.getenv("AWS_REGION", "us-east-1")
@@ -62,7 +62,7 @@ def verify_aws():
     try:
         bedrock_runtime = boto3.client("bedrock-runtime", region_name=region)
         payload = {
-            "inputText": "OmniContext cross-repository code retrieval test.",
+            "inputText": "CrossContext cross-repository code retrieval test.",
             "dimensions": 1024,
             "normalize": True
         }

@@ -39,6 +39,92 @@ class GitHubRepoIngester:
         name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', name)
         return name
 
+    @staticmethod
+    def fetch_organization_repos(org_name: str) -> List[str]:
+        """
+        Discovers and returns all repository clone URLs for any given GitHub organization or user account.
+        Supports:
+          - Org names: 'pallets', 'meshery', 'fastapi', 'tiangolo', 'kubernetes'
+          - Org/Repo URLs: 'https://github.com/orgs/meshery/repositories', 'https://github.com/pallets'
+        Uses GitHub REST API first (including GITHUB_TOKEN from env if available),
+        falling back to HTML extraction across org repositories and user profile tabs.
+        """
+        clean_org = org_name.strip().rstrip("/")
+        if "github.com/" in clean_org:
+            clean_org = clean_org.split("github.com/")[-1]
+            clean_org = re.sub(r'^(?:orgs|users)/', '', clean_org)
+            clean_org = clean_org.split("/")[0]
+        clean_org = re.sub(r'[^a-zA-Z0-9_\-]', '', clean_org)
+
+        if not clean_org:
+            return []
+
+        import json
+        import urllib.request
+
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token and os.path.exists(".env"):
+            try:
+                with open(".env", "r") as env_f:
+                    for line in env_f:
+                        if line.startswith("GITHUB_TOKEN="):
+                            val = line.strip().split("=", 1)[1].strip("\"'")
+                            if val:
+                                token = val
+                                break
+            except Exception:
+                pass
+
+        # 1. Official GitHub REST API
+        api_urls = [
+            f"https://api.github.com/orgs/{clean_org}/repos?per_page=100&sort=pushed",
+            f"https://api.github.com/users/{clean_org}/repos?per_page=100&sort=pushed"
+        ]
+        for api_url in api_urls:
+            try:
+                req = urllib.request.Request(api_url)
+                req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+                if token:
+                    req.add_header("Authorization", f"Bearer {token}")
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        if isinstance(data, list) and data:
+                            return [r["clone_url"] for r in data if "clone_url" in r]
+            except Exception:
+                continue
+
+        # 2. Resilient Fallback: Scrape public repositories via urllib
+        page_urls = [
+            f"https://github.com/orgs/{clean_org}/repositories",
+            f"https://github.com/{clean_org}?tab=repositories",
+            f"https://github.com/{clean_org}"
+        ]
+        ignored_names = {
+            "repositories", "people", "packages", "sponsoring", "projects",
+            "teams", "followers", "following", "stars", "site", "audit-log",
+            "discussions", "security", "settings", "insights"
+        }
+
+        for p_url in page_urls:
+            try:
+                req = urllib.request.Request(p_url)
+                req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    html = resp.read().decode("utf-8", errors="ignore")
+                    matches = re.findall(rf'href=[\"\']/{clean_org}/([^/\#\?\"\'\s]+)[\"\']', html, re.IGNORECASE)
+                    seen = []
+                    for m in matches:
+                        m_clean = m.strip()
+                        if m_clean.lower() not in ignored_names and not m_clean.startswith(".") and m_clean not in seen:
+                            seen.append(m_clean)
+                    if seen:
+                        return [f"https://github.com/{clean_org}/{r}.git" for r in seen]
+            except Exception:
+                continue
+
+        return []
+
     def clone_repository(
         self,
         url_or_path: str,
@@ -90,25 +176,38 @@ class GitHubRepoIngester:
             # If not a valid git dir or pull failed, remove and re-clone
             shutil.rmtree(dest_path, ignore_errors=True)
 
-        # Perform shallow clone
-        cmd = ["git", "clone", "--depth", "1", url_or_path, str(dest_path)]
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            if res.returncode != 0:
-                return {
-                    "repo_name": repo_name,
-                    "path": "",
-                    "source": "github",
-                    "status": "failed",
-                    "error": res.stderr or "Git clone returned non-zero exit code."
-                }
-        except Exception as e:
+        # Perform shallow clone with network buffer optimization and retry logic
+        git_config = [
+            "-c", "http.postBuffer=524288000",
+            "-c", "http.lowSpeedLimit=1000",
+            "-c", "http.lowSpeedTime=30",
+        ]
+        cmd = ["git"] + git_config + ["clone", "--depth", "1", "--filter=blob:none", url_or_path, str(dest_path)]
+
+        last_error = ""
+        for attempt in range(1, 3):
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                if res.returncode == 0 and (dest_path / ".git").exists():
+                    break
+                last_error = res.stderr or "Git clone returned non-zero exit code."
+                # Clean up failed partial clone before retrying
+                if dest_path.exists():
+                    shutil.rmtree(dest_path, ignore_errors=True)
+                # Fallback to standard depth 1 clone without filter if blob filter not supported
+                cmd = ["git"] + git_config + ["clone", "--depth", "1", url_or_path, str(dest_path)]
+            except Exception as e:
+                last_error = str(e)
+                if dest_path.exists():
+                    shutil.rmtree(dest_path, ignore_errors=True)
+
+        if not dest_path.exists() or not (dest_path / ".git").exists():
             return {
                 "repo_name": repo_name,
                 "path": "",
                 "source": "github",
                 "status": "failed",
-                "error": str(e)
+                "error": last_error or "Git clone failed after retries."
             }
 
         if progress_cb:

@@ -1,5 +1,5 @@
 """
-OmniContext - RepoQA Search Needle Function Benchmark (Modular)
+CrossContext - RepoQA Search Needle Function Benchmark (Modular)
 Evaluates the engine's ability to locate exact function definitions given only
 a docstring or semantic description, compared against naive text-chunk RAG.
 """
@@ -37,7 +37,7 @@ def run_repoqa_benchmark(
     """
     RepoQA Search Needle Function Benchmark.
 
-    Tests whether OmniContext can locate a specific function definition given
+    Tests whether CrossContext can locate a specific function definition given
     a semantic description (docstring-like query), and compares the precision
     against a naive text-chunking approach.
     """
@@ -91,7 +91,7 @@ def run_repoqa_benchmark(
     naive_tokens_estimate = 0
 
     for tc in test_queries:
-        # OmniContext approach: lexical search over AST-bounded nodes
+        # CrossContext approach: lexical search over AST-bounded nodes
         results = store.search_nodes_lexical(tc["query"].split()[0], limit=5)
 
         found = any(
@@ -125,7 +125,7 @@ def run_repoqa_benchmark(
         metrics={
             "tests_passed": passed_tests,
             "tests_total": total_tests,
-            "omnicontext_tokens": omni_tokens,
+            "crosscontext_tokens": omni_tokens,
             "naive_rag_tokens_estimate": naive_tokens_estimate,
             "token_reduction_pct": round(token_reduction * 100, 1),
             "symbols_indexed": len(all_nodes),

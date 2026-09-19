@@ -1,5 +1,5 @@
 """
-OmniContext - Environment & System Smoke Test
+CrossContext - Environment & System Smoke Test
 Run this script to verify that your local machine environment is properly set up.
 Usage:
     python scripts/smoke_test.py
@@ -16,7 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 def run_smoke_test():
     print("==================================================")
-    print("  OmniContext Multi-Machine Environment Smoke Test")
+    print("  CrossContext Multi-Machine Environment Smoke Test")
     print("==================================================")
 
     # 1. Python Version

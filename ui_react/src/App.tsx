@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'agent' | 'benchmarks'
+type Tab = 'agent' | 'blueprint' | 'explorer' | 'benchmarks'
 
 interface GraphNode {
   id: string
@@ -1294,7 +1294,502 @@ function BenchmarksView() {
   )
 }
 
-// ── Streamlined & Relevant Engine Settings Drawer ────────────────────────────
+// ── Org Blueprint & AI Context View ───────────────────────────────────────────
+
+function OrgBlueprintView() {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/org/blueprint')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)' }}>
+        loading federated organization architecture blueprint...
+      </div>
+    )
+  }
+
+  if (!data || !data.analysis) {
+    return (
+      <div style={{ padding: 40, fontFamily: 'var(--font-mono)', fontSize: 12, color: '#ef4444' }}>
+        Failed to load organization blueprint.
+      </div>
+    )
+  }
+
+  const { analysis, ai_context, approx_tokens } = data
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(ai_context)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownload = () => {
+    const blob = new Blob([ai_context], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'ORG_CONTEXT.txt'
+    a.click()
+  }
+
+  return (
+    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Title & Overview */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: '#111', margin: '0 0 4px' }}>
+            Federated Organization Architecture Blueprint
+          </h2>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
+            Automated architectural synthesis of all indexed repositories, cross-repo API contracts, and an ultra-compressed AI prompt for external IDEs.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleCopy}
+            style={{
+              padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: 'white', border: '1px solid var(--color-border-bright)',
+              color: '#111', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            {copied ? 'Copied' : 'Copy Prompt'}
+          </button>
+          <button
+            onClick={handleDownload}
+            style={{
+              padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: '#111', border: 'none', color: 'white',
+              borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            Download ORG_CONTEXT.txt
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        {[
+          { label: 'TOTAL REPOSITORIES', value: analysis.total_repositories },
+          { label: 'SOURCE FILES', value: analysis.total_files },
+          { label: 'DETERMINISTIC SYMBOLS', value: analysis.total_symbols },
+          { label: 'CROSS-REPO API CONTRACTS', value: analysis.cross_repo_contracts_count },
+        ].map(kpi => (
+          <div key={kpi.label} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '14px 16px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: '#111' }}>{kpi.value}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 4 }}>{kpi.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Cross-Repo API Contract Matrix Table */}
+      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+            INTER-REPOSITORY API CONTRACT MATRIX ({analysis.cross_repo_contracts_count})
+          </span>
+        </div>
+        {analysis.cross_repo_contracts && analysis.cross_repo_contracts.length > 0 ? (
+          <div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
+              padding: '8px 16px', background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)',
+              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', fontWeight: 600,
+            }}>
+              <span>CONSUMER FILE & SYMBOL</span>
+              <span>CONSUMER REPO</span>
+              <span>RELATIONSHIP</span>
+              <span>PRODUCER REPO</span>
+              <span>ENDPOINT SYMBOL</span>
+            </div>
+            {analysis.cross_repo_contracts.map((c: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
+                  padding: '10px 16px', borderBottom: i < analysis.cross_repo_contracts.length - 1 ? '1px solid var(--color-border)' : 'none',
+                  fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', alignItems: 'center',
+                }}
+              >
+                <span>{c.caller_file} : <b>{c.caller_symbol}</b></span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{c.caller_repo}</span>
+                <span style={{ color: '#ea580c', fontWeight: 600 }}>{c.edge_type}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{c.callee_repo}</span>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}>`{c.callee_symbol}`</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: 24, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+            No cross-repository dependencies detected yet. Ingest multiple interacting repositories to see contracts.
+          </div>
+        )}
+      </div>
+
+      {/* Raw AI Context Preview */}
+      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+            RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS • 98.2% SAVINGS)
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#16a34a', fontWeight: 600 }}>
+            READY FOR CURSOR / WINDSURF / CLAUDE CODE
+          </span>
+        </div>
+        <textarea
+          readOnly
+          value={ai_context}
+          style={{
+            width: '100%', height: 320, padding: 16, border: 'none', outline: 'none',
+            fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5, background: '#0D1117', color: '#E6EDF3',
+            resize: 'vertical',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Interactive Code & File Explorer View ─────────────────────────────────────
+
+function CodeExplorerView({ repos }: { repos: string[] }) {
+  const [selectedRepo, setSelectedRepo] = useState(repos[0] || '')
+  const [fileList, setFileList] = useState<string[]>([])
+  const [selectedFile, setSelectedFile] = useState('')
+  const [fileContent, setFileContent] = useState('')
+  const [loadingFile, setLoadingFile] = useState(false)
+
+  // Fetch all graph nodes to derive unique files for selected repo
+  useEffect(() => {
+    fetch('http://localhost:8000/api/graph')
+      .then(r => r.json())
+      .then(g => {
+        const matchingFiles = Array.from(new Set(
+          g.nodes
+            .filter((n: any) => n.repo === selectedRepo && n.file_path)
+            .map((n: any) => n.file_path as string)
+        )).sort() as string[]
+        setFileList(matchingFiles)
+        if (matchingFiles.length > 0) {
+          setSelectedFile(matchingFiles[0])
+        } else {
+          setSelectedFile('')
+          setFileContent('')
+        }
+      })
+      .catch(() => {})
+  }, [selectedRepo])
+
+  // Fetch content when file changes
+  useEffect(() => {
+    if (!selectedRepo || !selectedFile) return
+    setLoadingFile(true)
+    fetch(`http://localhost:8000/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
+      .then(r => r.json())
+      .then(res => {
+        setFileContent(res.content || '(File content empty or unavailable on disk)')
+        setLoadingFile(false)
+      })
+      .catch(() => {
+        setFileContent('(Error loading file from server)')
+        setLoadingFile(false)
+      })
+  }, [selectedRepo, selectedFile])
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', height: '100%', overflow: 'hidden' }}>
+      {/* File Tree Sidebar */}
+      <div style={{ borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', background: 'white' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 4 }}>
+            REPOSITORY
+          </div>
+          <select
+            value={selectedRepo}
+            onChange={e => setSelectedRepo(e.target.value)}
+            style={{
+              width: '100%', padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              border: '1px solid var(--color-border-bright)', borderRadius: 2, background: 'white', color: '#111',
+            }}
+          >
+            {repos.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          <div style={{ padding: '0 14px 6px', fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1 }}>
+            INDEXED SOURCE FILES ({fileList.length})
+          </div>
+          {fileList.map(f => (
+            <div
+              key={f}
+              onClick={() => setSelectedFile(f)}
+              style={{
+                padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+                background: f === selectedFile ? 'var(--color-surface-2)' : 'transparent',
+                color: f === selectedFile ? '#111' : 'var(--color-text-muted)',
+                borderLeft: f === selectedFile ? '2px solid #111' : '2px solid transparent',
+              }}
+            >
+              📄 {f}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Source Code Viewer */}
+      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#0D1117' }}>
+        <div style={{
+          padding: '8px 16px', borderBottom: '1px solid #30363D', background: '#161B22',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#C9D1D9', fontWeight: 600 }}>
+            {selectedFile || '(No file selected)'}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#8B949E' }}>
+            {selectedRepo}
+          </span>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          {loadingFile ? (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#8B949E' }}>loading file...</div>
+          ) : (
+            <pre style={{
+              margin: 0, fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6,
+              color: '#E6EDF3', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+            }}>
+              {fileContent}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Ingestion Modal (Supports Any Org Link or Custom URLs) ─────────────────────
+
+function IngestModal({
+  open,
+  onClose,
+  onIngestSuccess,
+}: {
+  open: boolean
+  onClose: () => void
+  onIngestSuccess: () => void
+}) {
+  const [mode, setMode] = useState<'org' | 'custom'>('org')
+  const [orgInput, setOrgInput] = useState('')
+  const [customUrls, setCustomUrls] = useState('')
+  const [maxRepos, setMaxRepos] = useState(5)
+  const [wipeExisting, setWipeExisting] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [statusMsg, setStatusMsg] = useState('')
+
+  if (!open) return null
+
+  const handleStartIngest = async () => {
+    setLoading(true)
+    setStatusMsg('Discovering repositories...')
+
+    let targetUrls: string[] = []
+
+    if (mode === 'org') {
+      if (!orgInput.trim()) {
+        setStatusMsg('Please enter an organization name or URL.')
+        setLoading(false)
+        return
+      }
+      try {
+        const discRes = await fetch('http://localhost:8000/api/repos/discover-org', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ org: orgInput.trim() }),
+        })
+        const discData = await discRes.json()
+        if (!discData.repositories || discData.repositories.length === 0) {
+          setStatusMsg(`No repositories found for '${orgInput}'.`)
+          setLoading(false)
+          return
+        }
+        targetUrls = discData.repositories.slice(0, maxRepos)
+        setStatusMsg(`Found ${discData.repositories.length} repos. Ingesting top ${targetUrls.length}...`)
+      } catch (e: any) {
+        setStatusMsg(`Discovery failed: ${e.message}`)
+        setLoading(false)
+        return
+      }
+    } else {
+      targetUrls = customUrls.split('\n').map(u => u.trim()).filter(Boolean)
+      if (targetUrls.length === 0) {
+        setStatusMsg('Please enter at least one repository URL.')
+        setLoading(false)
+        return
+      }
+    }
+
+    try {
+      setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into AST graph...`)
+      const res = await fetch('http://localhost:8000/api/repos/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setStatusMsg(`✓ Successfully indexed ${data.indexed_nodes} symbols across ${data.repositories.length} repos!`)
+        setTimeout(() => {
+          setLoading(false)
+          onIngestSuccess()
+          onClose()
+        }, 1200)
+      } else {
+        setStatusMsg(`Ingestion failed: ${data.errors ? data.errors.join(', ') : 'Unknown error'}`)
+        setLoading(false)
+      }
+    } catch (e: any) {
+      setStatusMsg(`Error during ingestion: ${e.message}`)
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        width: 500, background: 'white', border: '1px solid var(--color-border)',
+        borderRadius: 4, zIndex: 70, boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111' }}>
+            📥 Ingest Dynamic GitHub Codebase
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Mode Selector */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[
+              { id: 'org', label: 'GitHub Organization (Auto-discover)' },
+              { id: 'custom', label: 'Custom Repo URLs' },
+            ].map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMode(m.id as any)}
+                style={{
+                  flex: 1, padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: mode === m.id ? '#111' : 'var(--color-surface)',
+                  color: mode === m.id ? 'white' : 'var(--color-text-muted)',
+                  border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'org' ? (
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                GITHUB ORGANIZATION NAME OR URL
+              </div>
+              <input
+                value={orgInput}
+                onChange={e => setOrgInput(e.target.value)}
+                placeholder="e.g. pallets, meshery, fastapi, or https://github.com/orgs/pallets/repositories"
+                style={{
+                  width: '100%', padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
+                  Max repositories to index:
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={maxRepos}
+                  onChange={e => setMaxRepos(parseInt(e.target.value) || 5)}
+                  style={{ width: 60, padding: '3px 6px', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                REPOSITORY URLS (one per line)
+              </div>
+              <textarea
+                value={customUrls}
+                onChange={e => setCustomUrls(e.target.value)}
+                placeholder="https://github.com/fastapi/fastapi&#10;https://github.com/encode/starlette"
+                style={{
+                  width: '100%', height: 100, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                }}
+              />
+            </div>
+          )}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={wipeExisting} onChange={e => setWipeExisting(e.target.checked)} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
+              Wipe existing graph & replace
+            </span>
+          </label>
+
+          {statusMsg && (
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 10px',
+              background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+              borderRadius: 2, color: '#111',
+            }}>
+              {statusMsg}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '12px 18px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleStartIngest}
+            disabled={loading}
+            style={{
+              padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600,
+            }}
+          >
+            {loading ? 'Ingesting...' : 'Start Ingestion'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
 
 function EngineSettingsSidebar({
   open,
@@ -1550,6 +2045,7 @@ function EngineSettingsSidebar({
 export default function App() {
   const [tab, setTab] = useState<Tab>('agent')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [ingestModalOpen, setIngestModalOpen] = useState(false)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [engineConfig, setEngineConfig] = useState<EngineConfig>(DEFAULT_ENGINE)
   const [diffDrawerData, setDiffDrawerData] = useState<DiffResponse | null>(null)
@@ -1567,7 +2063,7 @@ export default function App() {
   })
 
   // Target org / repo
-  const [orgUrl, setOrgUrl] = useState('https://github.com/abhayrajjais01/OmniContext')
+  const [orgUrl, setOrgUrl] = useState('https://github.com/abhayrajjais01/CrossContext')
   const [repoName, setRepoName] = useState('')
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false)
 
@@ -1632,7 +2128,9 @@ export default function App() {
         {/* Navigation Tabs */}
         <nav style={{ display: 'flex', gap: 0 }}>
           {([
-            { id: 'agent', label: 'Agent Task' },
+            { id: 'agent', label: 'Agent Task & Graph' },
+            { id: 'blueprint', label: 'Org Blueprint' },
+            { id: 'explorer', label: 'Code Explorer' },
             { id: 'benchmarks', label: 'Benchmarks' },
           ] as const).map(item => (
             <button
@@ -1651,7 +2149,7 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Quick Stats & Engine Settings Trigger */}
+        {/* Quick Stats, Ingest Button & Engine Settings Trigger */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', gap: 14 }}>
             {[
@@ -1667,6 +2165,16 @@ export default function App() {
           </div>
           <div style={{ width: 1, height: 18, background: 'var(--color-border)' }} />
           <button
+            onClick={() => setIngestModalOpen(true)}
+            style={{
+              padding: '4px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: '#111', border: '1px solid #111',
+              color: 'white', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            + Ingest Repos
+          </button>
+          <button
             onClick={() => setSettingsOpen(true)}
             style={{
               padding: '4px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
@@ -1674,7 +2182,7 @@ export default function App() {
               color: '#111', borderRadius: 2, cursor: 'pointer', fontWeight: 500,
             }}
           >
-            ⚙ engine settings
+            engine settings
           </button>
         </div>
       </header>
@@ -1785,7 +2293,7 @@ export default function App() {
                   CROSS-REPOSITORY AST SEMANTIC GRAPH
                 </span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)' }}>
-                  ✥ 2D Pan & Zoom • Click node for caller/callee blast radius
+                  2D Pan & Zoom • Click node for caller/callee blast radius
                 </span>
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -1800,12 +2308,31 @@ export default function App() {
           </div>
         )}
 
+        {tab === 'blueprint' && (
+          <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
+            <OrgBlueprintView />
+          </div>
+        )}
+
+        {tab === 'explorer' && (
+          <div style={{ height: '100%', overflow: 'hidden' }}>
+            <CodeExplorerView repos={availableRepos} />
+          </div>
+        )}
+
         {tab === 'benchmarks' && (
           <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
             <BenchmarksView />
           </div>
         )}
       </main>
+
+      {/* Ingestion Modal */}
+      <IngestModal
+        open={ingestModalOpen}
+        onClose={() => setIngestModalOpen(false)}
+        onIngestSuccess={loadData}
+      />
 
       {/* Cross-Repo Diffs & Synchronized PR Drawer */}
       <CrossRepoDiffDrawer

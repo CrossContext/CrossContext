@@ -1,10 +1,10 @@
 """
-OmniContext - Automated Amazon OpenSearch Serverless (AOSS) Provisioning Script
+CrossContext - Automated Amazon OpenSearch Serverless (AOSS) Provisioning Script
 Automatically creates:
 1. Encryption Policy (KMS)
 2. Network Policy (Public/VPC access for collection)
 3. Data Access Policy (Grants current IAM caller full collection & index permissions)
-4. Vector Search Collection ('omnicontext-code-index')
+4. Vector Search Collection ('crosscontext-code-index')
 Usage:
     python scripts/setup_aws_infra.py
 """
@@ -33,7 +33,7 @@ def setup_aoss():
     print("==================================================")
 
     region = os.getenv("AWS_REGION", "us-east-1")
-    collection_name = "omnicontext-code-index"
+    collection_name = "crosscontext-code-index"
     
     sts = boto3.client("sts", region_name=region)
     caller = sts.get_caller_identity()
@@ -148,7 +148,7 @@ def setup_aoss():
         res = aoss.create_collection(
             name=collection_name,
             type="VECTORSEARCH",
-            description="Vector search collection for OmniContext AST semantic chunks"
+            description="Vector search collection for CrossContext AST semantic chunks"
         )
         print("CREATING (takes ~1-2 minutes)")
     except aoss.exceptions.ConflictException:

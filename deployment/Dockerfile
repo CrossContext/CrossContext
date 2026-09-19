@@ -22,7 +22,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV ENV=aws
 
-EXPOSE 8080 8501
+EXPOSE 8080 8000
 
 # Production Bedrock AgentCore entrypoint
 CMD ["python", "agent_orchestrator/bedrock_agentcore_app.py"]
