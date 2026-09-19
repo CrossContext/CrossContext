@@ -1,0 +1,188 @@
+"""
+OmniContext - Dynamic GitHub Repository Ingester
+Clones and indexes real-world multi-repository codebases from GitHub or local paths.
+Parses AST boundaries, discovers cross-repo dependencies, and registers symbols in the knowledge graph.
+"""
+
+import os
+import re
+import sys
+import shutil
+import subprocess
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Callable
+
+from mcp_server.tools import CodeGraphToolManager
+
+
+class GitHubRepoIngester:
+    def __init__(self, base_storage_dir: Optional[str] = None):
+        """
+        Initializes the ingester. Repositories are cloned into `data/repos/<repo_name>`.
+        """
+        if base_storage_dir:
+            self.base_dir = Path(base_storage_dir)
+        else:
+            self.base_dir = Path("data/repos")
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def extract_repo_name(url_or_path: str) -> str:
+        """Extracts a clean repository name from a GitHub URL or filesystem path."""
+        cleaned = url_or_path.strip().rstrip("/")
+        if cleaned.endswith(".git"):
+            cleaned = cleaned[:-4]
+        # Match github.com/org/repo or local/path/to/repo
+        parts = re.split(r'[/:\\]', cleaned)
+        name = parts[-1] if parts else "unknown_repo"
+        # Sanitize to valid directory name
+        name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', name)
+        return name
+
+    def clone_repository(
+        self,
+        url_or_path: str,
+        progress_cb: Optional[Callable[[str, str, float], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Clones a GitHub repository shallowly (--depth 1) or verifies a local path.
+        """
+        repo_name = self.extract_repo_name(url_or_path)
+        dest_path = self.base_dir / repo_name
+
+        # Check if input is an existing local directory
+        local_path = Path(url_or_path)
+        if local_path.is_dir():
+            if progress_cb:
+                progress_cb("verify", f"Using existing local repository at {local_path}", 1.0)
+            return {
+                "repo_name": repo_name,
+                "path": str(local_path.resolve()),
+                "source": "local_directory",
+                "status": "ready"
+            }
+
+        # Otherwise treat as Git URL
+        if progress_cb:
+            progress_cb("cloning", f"Cloning {url_or_path} into {dest_path}...", 0.2)
+
+        # If destination already exists, pull or clean
+        if dest_path.exists():
+            if (dest_path / ".git").exists():
+                if progress_cb:
+                    progress_cb("pull", f"Updating existing clone of {repo_name}...", 0.5)
+                try:
+                    subprocess.run(
+                        ["git", "pull", "--depth", "1"],
+                        cwd=str(dest_path),
+                        capture_output=True,
+                        text=True,
+                        timeout=45
+                    )
+                    return {
+                        "repo_name": repo_name,
+                        "path": str(dest_path.resolve()),
+                        "source": "github",
+                        "status": "updated"
+                    }
+                except Exception:
+                    pass
+            # If not a valid git dir or pull failed, remove and re-clone
+            shutil.rmtree(dest_path, ignore_errors=True)
+
+        # Perform shallow clone
+        cmd = ["git", "clone", "--depth", "1", url_or_path, str(dest_path)]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if res.returncode != 0:
+                return {
+                    "repo_name": repo_name,
+                    "path": "",
+                    "source": "github",
+                    "status": "failed",
+                    "error": res.stderr or "Git clone returned non-zero exit code."
+                }
+        except Exception as e:
+            return {
+                "repo_name": repo_name,
+                "path": "",
+                "source": "github",
+                "status": "failed",
+                "error": str(e)
+            }
+
+        if progress_cb:
+            progress_cb("cloned", f"Successfully cloned {repo_name}!", 0.6)
+
+        return {
+            "repo_name": repo_name,
+            "path": str(dest_path.resolve()),
+            "source": "github",
+            "status": "cloned"
+        }
+
+    def ingest_repositories(
+        self,
+        urls_or_paths: List[str],
+        tool_manager: CodeGraphToolManager,
+        clear_existing: bool = True,
+        progress_cb: Optional[Callable[[str, str, float], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Clones multiple repositories, extracts AST structural symbols,
+        links cross-repository dependencies, and registers all nodes into the knowledge graph.
+        """
+        repo_paths: Dict[str, str] = {}
+        clone_results = []
+        errors = []
+
+        total_repos = len(urls_or_paths)
+        for idx, item in enumerate(urls_or_paths):
+            if not item.strip():
+                continue
+            progress = (idx / max(total_repos, 1)) * 0.5
+            if progress_cb:
+                progress_cb("start", f"Processing repository {idx+1}/{total_repos}: {item}", progress)
+
+            res = self.clone_repository(item.strip(), progress_cb=progress_cb)
+            clone_results.append(res)
+            if res["status"] in ("ready", "updated", "cloned") and res["path"]:
+                repo_paths[res["repo_name"]] = res["path"]
+            else:
+                errors.append(f"{res['repo_name']}: {res.get('error', 'Failed to clone')}")
+
+        if not repo_paths:
+            return {
+                "status": "error",
+                "message": "No repositories could be resolved or cloned.",
+                "errors": errors,
+                "indexed_nodes": 0,
+                "cross_repo_edges": 0,
+                "nodes": [],
+                "edges": []
+            }
+
+        if progress_cb:
+            progress_cb("parsing", f"Parsing AST boundaries across {len(repo_paths)} repositories...", 0.7)
+
+        # Index the repositories into the CodeGraphToolManager
+        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing)
+
+        if progress_cb:
+            progress_cb(
+                "finished",
+                f"Indexing complete! {index_stats['indexed_nodes']} symbols & {index_stats['cross_repo_edges']} cross-repo edges mapped.",
+                1.0
+            )
+
+        return {
+            "status": "success",
+            "repositories": list(repo_paths.keys()),
+            "indexed_nodes": index_stats["indexed_nodes"],
+            "internal_edges": index_stats.get("internal_edges", 0),
+            "cross_repo_edges": index_stats.get("cross_repo_edges", 0),
+            "nodes": index_stats.get("nodes", []),
+            "edges": index_stats.get("edges", []),
+            "clone_results": clone_results,
+            "errors": errors
+        }
