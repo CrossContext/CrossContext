@@ -26,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from common.models import SymbolType, EdgeType
+from agent_orchestrator.bedrock_client import BedrockClient
 from agent_orchestrator.agent import CrossContextAgent
 from agent_orchestrator.diff_generator import CrossRepoDiffGenerator
 from mcp_server.ingestion.github_ingester import GitHubRepoIngester
@@ -44,11 +45,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Agent, Graph Store & Diff Generator
+# Initialize Agent, Graph Store, Bedrock Client & Diff Generator
 agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
 store = agent.tool_manager.graph_store
 ingester = GitHubRepoIngester()
 diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
+bedrock_client = BedrockClient()
 
 # Ensure default testbed is indexed on startup if empty
 def _bootstrap():
@@ -78,19 +80,27 @@ class IngestRequest(BaseModel):
 
 # --- API Routes ---
 
+@app.get("/api/aws/status")
+def get_aws_status():
+    """Returns AWS Bedrock and OpenSearch connectivity and credential status."""
+    return bedrock_client.check_connection()
+
+
 @app.get("/api/stats")
 def get_stats():
     """Returns database and vector engine statistics."""
     stats = store.get_stats()
     all_edges = store.get_all_edges()
     cross_repo_count = len([e for e in all_edges if e.edge_type == EdgeType.CONSUMES_API])
+    aws_status = bedrock_client.check_connection()
     return {
         "repositories": stats["repositories"],
         "total_symbols": stats["total_symbols"],
         "total_edges": stats["total_edges"],
         "cross_repo_edges": cross_repo_count,
-        "db_engine": stats["db_engine"],
-        "runtime_env": os.getenv("ENV", "local").lower(),
+        "db_engine": "AWS OpenSearch Serverless" if aws_status.get("connected") else stats["db_engine"],
+        "runtime_env": "aws" if aws_status.get("connected") else os.getenv("ENV", "local").lower(),
+        "aws": aws_status,
     }
 
 
