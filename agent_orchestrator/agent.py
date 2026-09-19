@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 from agent_orchestrator.model_provider import ModelProvider
 from agent_orchestrator.hooks import LifecycleGuardrails
+from agent_orchestrator.session_manager import SessionManager
 from mcp_server.tools import CodeGraphToolManager
 
 
@@ -29,11 +30,75 @@ Guidelines:
 - Formulate a precise, actionable migration plan detailing both producer and consumer repositories.
 """
 
+# Bedrock Claude-compatible tool schemas for all 5 MCP tools
+TOOLS_SCHEMA = [
+    {
+        "name": "traverse_call_graph",
+        "description": "Traces the full blast radius of a symbol across all repositories. Returns upstream consumers and downstream dependencies.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "root_symbol": {"type": "string", "description": "Starting symbol name (e.g., 'verify_legacy_auth')"},
+                "max_depth": {"type": "integer", "description": "Maximum recursion hops (default: 3)", "default": 3}
+            },
+            "required": ["root_symbol"]
+        }
+    },
+    {
+        "name": "get_symbol_definition",
+        "description": "Locates the exact definition, line numbers, and code of a function, class, or endpoint across all repositories.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol_name": {"type": "string", "description": "Name of function, class, or endpoint"},
+                "repo": {"type": "string", "description": "Optional repository filter"}
+            },
+            "required": ["symbol_name"]
+        }
+    },
+    {
+        "name": "get_usage_dependency_links",
+        "description": "Returns all upstream callers and downstream consumers that depend on this symbol across repository boundaries.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol_name_or_id": {"type": "string", "description": "Symbol name or unique node ID"}
+            },
+            "required": ["symbol_name_or_id"]
+        }
+    },
+    {
+        "name": "get_ast_chunk",
+        "description": "Retrieves the complete unbroken AST code block for a symbol by node ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "node_id": {"type": "string", "description": "Deterministic node ID (e.g., 'repo_auth_core:src/api/auth.py:verify_legacy_auth:24')"}
+            },
+            "required": ["node_id"]
+        }
+    },
+    {
+        "name": "semantic_code_search",
+        "description": "Searches codebases using natural language intent via dense vector embeddings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Conceptual search query (e.g., 'JWT token verification')"},
+                "repo": {"type": "string", "description": "Optional repository filter"},
+                "limit": {"type": "integer", "description": "Number of results (default: 5)", "default": 5}
+            },
+            "required": ["query"]
+        }
+    }
+]
+
 
 class OmniContextAgent:
     def __init__(self, db_path: str = "data/omnicontext_graph.db"):
         self.model_provider = ModelProvider()
         self.tool_manager = CodeGraphToolManager(db_path=db_path)
+        self.session_manager = SessionManager()
         self._tool_dispatch = {
             "traverse_call_graph": lambda args: self.tool_manager.traverse_call_graph(
                 args.get("root_symbol", ""), args.get("max_depth", 3)
@@ -55,6 +120,7 @@ class OmniContextAgent:
     async def run(
         self,
         prompt: str,
+        session_id: Optional[str] = None,
         repos: Optional[List[str]] = None,
         telemetry_callback: Optional[Callable[[str, Any], None]] = None
     ) -> Dict[str, Any]:
@@ -64,9 +130,13 @@ class OmniContextAgent:
         start_time = time.time()
         guardrails = LifecycleGuardrails(max_tool_calls=8, token_budget=12000)
 
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
+        if session_id:
+            self.session_manager.add_message(session_id, "user", prompt)
+            messages = self.session_manager.get_context_for_model(session_id)
+        else:
+            messages = [
+                {"role": "user", "content": prompt}
+            ]
 
         turns_executed = 0
         final_answer = ""
@@ -77,11 +147,11 @@ class OmniContextAgent:
             if telemetry_callback:
                 telemetry_callback("thinking", f"Agent reasoning turn #{turns_executed}...")
 
-            # 1. Model inference
+            # 1. Model inference — pass full tools schema for Bedrock Claude compatibility
             response = self.model_provider.invoke_with_tools(
                 system_prompt=SYSTEM_PROMPT,
                 messages=messages,
-                tools=[]  # Tools schema passed to Bedrock Claude
+                tools=TOOLS_SCHEMA
             )
 
             assistant_msg = response
@@ -110,6 +180,8 @@ class OmniContextAgent:
                 tool_id = tc.get("id")
 
                 if not guardrails.before_tool_call(tool_name, tool_args):
+                    if telemetry_callback:
+                        telemetry_callback("guardrail", f"Guardrail blocked tool `{tool_name}`")
                     continue
 
                 if telemetry_callback:
@@ -124,6 +196,9 @@ class OmniContextAgent:
                 duration_ms = (time.time() - t_start) * 1000.0
 
                 guardrails.after_tool_call(tool_name, tool_args, result, duration_ms)
+
+                if telemetry_callback:
+                    telemetry_callback("tool_result", f"`{tool_name}` completed in {duration_ms:.1f}ms")
 
                 if "blast_radius_files" in result:
                     nodes_touched.update(result["blast_radius_files"])
@@ -144,12 +219,19 @@ class OmniContextAgent:
         total_duration = (time.time() - start_time) * 1000.0
         telemetry = guardrails.get_telemetry()
         telemetry["total_runtime_ms"] = total_duration
+        safety_report = guardrails.get_safety_report()
+
+        if session_id and final_answer:
+            self.session_manager.add_message(session_id, "assistant", final_answer)
 
         return {
             "status": "success",
             "prompt": prompt,
+            "session_id": session_id,
             "response": final_answer,
             "turns": turns_executed,
             "nodes_touched": list(nodes_touched),
-            "telemetry": telemetry
+            "telemetry": telemetry,
+            "safety_report": safety_report
         }
+
