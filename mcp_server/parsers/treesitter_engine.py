@@ -183,11 +183,21 @@ class TreeSitterEngine:
         http_method = "GET"
         for dec in item.decorator_list:
             dec_str = ast.unparse(dec) if hasattr(ast, "unparse") else ""
-            route_match = re.search(r'@?(?:app|router|api)\.(get|post|put|delete|patch)\s*\(\s*[\'"]([^\'"]+)[\'"]', dec_str, re.IGNORECASE)
+            route_match = re.search(r'@?(?:app|router|api|bp)\.(get|post|put|delete|patch)\s*\(\s*[\'"]([^\'"]+)[\'"]', dec_str, re.IGNORECASE)
             if route_match:
                 is_endpoint = True
                 http_method = route_match.group(1).upper()
                 route_path = route_match.group(2)
+            else:
+                # Flask / Blueprint style @app.route('/path', methods=['GET', 'POST'])
+                flask_match = re.search(r'@?(?:app|router|api|bp)\.route\s*\(\s*[\'"]([^\'"]+)[\'"](?:.*methods\s*=\s*\[([^\]]+)\])?', dec_str, re.IGNORECASE)
+                if flask_match:
+                    is_endpoint = True
+                    route_path = flask_match.group(1)
+                    if flask_match.group(2):
+                        first_method = re.search(r'[\'"]([a-zA-Z]+)[\'"]', flask_match.group(2))
+                        if first_method:
+                            http_method = first_method.group(1).upper()
 
         symbol_type = SymbolType.ENDPOINT if is_endpoint else (SymbolType.METHOD if is_method else SymbolType.FUNCTION)
         docstring = ast.get_docstring(item) or ""
@@ -197,6 +207,29 @@ class TreeSitterEngine:
         if is_endpoint and route_path:
             meta["endpoint_route"] = route_path
             meta["http_method"] = http_method
+        else:
+            # Check if this Python function consumes external endpoints via requests/httpx/aiohttp/client
+            py_api_pattern = re.compile(
+                r'(?:requests|httpx|client|session|http|aiohttp)\.(?P<method>get|post|put|delete|patch)\s*\(\s*f?[\'"`]([^\'"`]+)[\'"`]|'
+                r'(?:requests|httpx)\.request\s*\(\s*[\'"`](?P<req_method>GET|POST|PUT|DELETE|PATCH)[\'"`]\s*,\s*f?[\'"`]([^\'"`]+)[\'"`]',
+                re.IGNORECASE
+            )
+            api_match = py_api_pattern.search(code_block)
+            if api_match:
+                raw_url = api_match.group(2) or api_match.group(4)
+                http_verb = (api_match.group("method") or api_match.group("req_method") or "GET").upper()
+                cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_url)
+                route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
+                meta["consumes_endpoint"] = route_m.group(1) if route_m else cleaned_endpoint
+                meta["consumes_http_method"] = http_verb
+            else:
+                for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/{}:]+)[\'"`]', code_block):
+                    target_url = direct_match.group(2) if direct_match.group(2) else direct_match.group(3)
+                    if target_url and not any(target_url.endswith(ext) for ext in ('.py', '.ts', '.js', '.json', '.html', '.css', '.png')):
+                        meta["consumes_endpoint"] = target_url
+                        meta["consumes_http_method"] = "POST" if ("post" in code_block.lower() or "POST" in code_block) else "GET"
+                        break
+
         if parent_class:
             meta["parent_class"] = parent_class
 
@@ -314,7 +347,14 @@ class TreeSitterEngine:
             re.compile(r'^\s*(?:public|private|protected|async)?\s*(?:async\s+)?([a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?::\s*[^{]+)?\s*\{'),
         ]
 
-        api_call_pattern = re.compile(r'(?:fetch|axios\.(?P<method>get|post|put|delete|patch)|apiClient\.(?P<client_method>get|post|put|delete|patch)|api\.(?P<api_method>get|post|put|delete|patch))\s*\(\s*[`\'"]([^`\'"]+)[`\'"]')
+        api_call_pattern = re.compile(
+            r'(?:fetch|axios\.(?P<method>get|post|put|delete|patch)|axios|'
+            r'ky\.(?P<ky_method>get|post|put|delete|patch)|ky|'
+            r'apiClient\.(?P<client_method>get|post|put|delete|patch)|'
+            r'api\.(?P<api_method>get|post|put|delete|patch)|'
+            r'httpClient\.(?P<http_method>get|post|put|delete|patch))\s*\(\s*[`\'"]([^`\'"]+)[`\'"]',
+            re.IGNORECASE
+        )
 
         for idx, line in enumerate(lines, start=1):
             for pat in func_patterns:
@@ -328,28 +368,67 @@ class TreeSitterEngine:
                     block = "".join(lines[idx - 1 : end_line])
 
                     meta: Dict[str, Any] = {"file_imports": file_imports}
+                    is_endpoint = False
+                    endpoint_route = ""
+                    endpoint_method = "GET"
 
-                    # Check for API endpoint calls
+                    # Check for Express / Fastify endpoint: app.get('/route', ...), router.post(...)
+                    express_m = re.search(r'(?:app|router|server|api)\.(get|post|put|delete|patch)\s*\(\s*[\'"`]([^\'"`]+)[\'"`]', line, re.IGNORECASE)
+                    if express_m:
+                        is_endpoint = True
+                        endpoint_method = express_m.group(1).upper()
+                        endpoint_route = express_m.group(2)
+
+                    # Check for Next.js App Router route handlers: export async function GET / POST
+                    if not is_endpoint and name.upper() in ("GET", "POST", "PUT", "DELETE", "PATCH") and any(k in file_path.lower() for k in ("api", "route")):
+                        is_endpoint = True
+                        endpoint_method = name.upper()
+                        clean_fp = file_path.replace("\\", "/").replace("/route.ts", "").replace("/route.js", "").replace(".ts", "").replace(".js", "")
+                        if "api/" in clean_fp:
+                            endpoint_route = "/" + clean_fp[clean_fp.find("api/"):]
+                        else:
+                            endpoint_route = "/" + clean_fp
+
+                    # Check for NestJS controller decorators: @Get('/path'), @Post(...)
+                    if not is_endpoint:
+                        prev_context = "".join(lines[max(0, idx - 4) : idx])
+                        nest_m = re.search(r'@(Get|Post|Put|Delete|Patch)\s*\(\s*[\'"`]([^\'"`]+)[\'"`]', prev_context, re.IGNORECASE)
+                        if nest_m:
+                            is_endpoint = True
+                            endpoint_method = nest_m.group(1).upper()
+                            endpoint_route = nest_m.group(2)
+
+                    if is_endpoint and endpoint_route:
+                        meta["endpoint_route"] = endpoint_route
+                        meta["http_method"] = endpoint_method
+                        sym_type = SymbolType.ENDPOINT
+                    else:
+                        sym_type = SymbolType.FUNCTION
+
+                    # Check for API endpoint calls (consumer)
                     api_match = api_call_pattern.search(block)
                     if api_match:
-                        raw_endpoint = api_match.group(4) or api_match.group(0)
-                        http_verb = api_match.group("method") or api_match.group("client_method") or api_match.group("api_method") or "GET"
-                        if "method: \"POST\"" in block or "method: 'POST'" in block:
+                        raw_endpoint = api_match.group(6) or api_match.group(0)
+                        http_verb = api_match.group("method") or api_match.group("ky_method") or api_match.group("client_method") or api_match.group("api_method") or api_match.group("http_method") or "GET"
+                        if "method: \"POST\"" in block or "method: 'POST'" in block or "method: `POST`" in block:
                             http_verb = "POST"
+                        elif "method: \"DELETE\"" in block or "method: 'DELETE'" in block:
+                            http_verb = "DELETE"
+                        elif "method: \"PUT\"" in block or "method: 'PUT'" in block:
+                            http_verb = "PUT"
                         elif "method: \"GET\"" in block or "method: 'GET'" in block:
                             http_verb = "GET"
 
-                        # Strip protocol and domain if absolute URL (e.g. https://auth.internal.corp/api/v1/auth/verify)
                         cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_endpoint)
-                        route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/]+)', cleaned_endpoint)
+                        route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
                         meta["consumes_endpoint"] = route_m.group(1) if route_m else cleaned_endpoint
                         meta["consumes_http_method"] = http_verb.upper()
 
                     # Direct route literal fallback
                     if "consumes_endpoint" not in meta:
-                        for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/]+)[\'"`]', block):
+                        for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/{}:]+)[\'"`]', block):
                             target_url = direct_match.group(2) if direct_match.group(2) else direct_match.group(3)
-                            if target_url:
+                            if target_url and not any(target_url.endswith(ext) for ext in ('.ts', '.js', '.tsx', '.jsx', '.json', '.html', '.css', '.png')):
                                 meta["consumes_endpoint"] = target_url
                                 meta["consumes_http_method"] = "POST" if ("post" in block.lower() or "POST" in block) else "GET"
                                 break
@@ -359,7 +438,7 @@ class TreeSitterEngine:
                         repo=repo,
                         file_path=file_path,
                         symbol_name=name,
-                        symbol_type=SymbolType.FUNCTION,
+                        symbol_type=sym_type,
                         start_line=idx,
                         end_line=end_line,
                         signature=line.strip(),
@@ -376,10 +455,21 @@ class TreeSitterEngine:
     # -------------------------------------------------------------
 
     def _parse_go(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Parses Go files for functions, structs, and receiver methods with exact brace boundaries."""
+        """Parses Go files for functions, structs, receiver methods, and HTTP endpoints/consumers."""
         nodes: List[CodeNode] = []
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
+
+        # Extract Go imports
+        file_imports = []
+        for imp_m in re.finditer(r'(?:import\s*\(\s*([\s\S]*?)\)|import\s+"([^"]+)")', content):
+            if imp_m.group(1):
+                for imp_line in imp_m.group(1).splitlines():
+                    pkg_m = re.search(r'"([^"]+)"', imp_line)
+                    if pkg_m:
+                        file_imports.append(pkg_m.group(1))
+            elif imp_m.group(2):
+                file_imports.append(imp_m.group(2))
 
         func_pattern = re.compile(r'^func\s+(?:\((?P<recv>[^)]+)\)\s+)?(?P<name>[a-zA-Z0-9_]+)\s*\((?P<args>[^)]*)\)')
         struct_pattern = re.compile(r'^type\s+(?P<name>[a-zA-Z0-9_]+)\s+struct\s*\{')
@@ -393,6 +483,52 @@ class TreeSitterEngine:
                 block = "".join(lines[idx - 1 : end_line])
                 sym_type = SymbolType.METHOD if recv else SymbolType.FUNCTION
                 node_id = CodeNode.generate_id(repo, file_path, name, idx)
+
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+                if recv:
+                    meta["receiver"] = recv
+
+                # Check if Go function registers an endpoint (Gin, Fiber, Echo, Chi, net/http)
+                go_ep_match = re.search(r'(?:r|router|api|v1|group|e|app|rg)\.(GET|POST|PUT|DELETE|PATCH)\s*\(\s*"([^"]+)"', block, re.IGNORECASE)
+                if not go_ep_match:
+                    go_ep_match = re.search(r'http\.HandleFunc\s*\(\s*"([^"]+)"', block)
+                    if go_ep_match:
+                        meta["endpoint_route"] = go_ep_match.group(1)
+                        meta["http_method"] = "GET"
+                        sym_type = SymbolType.ENDPOINT
+                else:
+                    meta["endpoint_route"] = go_ep_match.group(2)
+                    meta["http_method"] = go_ep_match.group(1).upper()
+                    sym_type = SymbolType.ENDPOINT
+
+                # Check Swagger comments above function: // @Router /api/v1/auth [post]
+                prev_comments = "".join(lines[max(0, idx - 6) : idx])
+                swag_m = re.search(r'//\s*@Router\s+([^\s]+)\s+\[([a-zA-Z]+)\]', prev_comments)
+                if swag_m:
+                    meta["endpoint_route"] = swag_m.group(1)
+                    meta["http_method"] = swag_m.group(2).upper()
+                    sym_type = SymbolType.ENDPOINT
+
+                # Check for Go HTTP client calls (consumer)
+                go_client_m = re.search(r'http\.(?:Get|Post)\s*\(\s*"([^"]+)"', block)
+                if go_client_m:
+                    raw_ep = go_client_m.group(1)
+                    cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_ep)
+                    meta["consumes_endpoint"] = cleaned_endpoint
+                    meta["consumes_http_method"] = "POST" if "Post" in go_client_m.group(0) else "GET"
+                else:
+                    go_req_m = re.search(r'http\.NewRequest(?:WithContext)?\s*\(\s*"(GET|POST|PUT|DELETE|PATCH)"\s*,\s*"([^"]+)"', block, re.IGNORECASE)
+                    if go_req_m:
+                        raw_ep = go_req_m.group(2)
+                        meta["consumes_endpoint"] = re.sub(r'^https?://[^/]+', '', raw_ep)
+                        meta["consumes_http_method"] = go_req_m.group(1).upper()
+                    else:
+                        client_m = re.search(r'(?:client|req|c)\.(Get|Post|Put|Delete)\s*\(\s*"([^"]+)"', block, re.IGNORECASE)
+                        if client_m:
+                            raw_ep = client_m.group(2)
+                            meta["consumes_endpoint"] = re.sub(r'^https?://[^/]+', '', raw_ep)
+                            meta["consumes_http_method"] = client_m.group(1).upper()
+
                 nodes.append(CodeNode(
                     id=node_id,
                     repo=repo,
@@ -403,7 +539,7 @@ class TreeSitterEngine:
                     end_line=end_line,
                     signature=line.strip(),
                     code_content=block,
-                    metadata={"receiver": recv} if recv else {}
+                    metadata=meta
                 ))
 
             s_match = struct_pattern.match(line)
@@ -421,7 +557,8 @@ class TreeSitterEngine:
                     start_line=idx,
                     end_line=end_line,
                     signature=line.strip(),
-                    code_content=block
+                    code_content=block,
+                    metadata={"file_imports": file_imports}
                 ))
 
         return nodes, edges
