@@ -19,7 +19,7 @@ class CodeGraphToolManager:
         self.parser = TreeSitterEngine()
         self.linker = CrossRepoLinker()
 
-    def index_repositories(self, repo_paths: Dict[str, str]) -> Dict[str, Any]:
+    def index_repositories(self, repo_paths: Dict[str, str], clear_existing: bool = False) -> Dict[str, Any]:
         """
         Ingests and indexes multiple repositories.
         repo_paths: {"repo_auth_core": "path/to/repo_auth_core", ...}
@@ -36,6 +36,9 @@ class CodeGraphToolManager:
         cross_edges = self.linker.link_repositories(all_nodes)
         all_edges.extend(cross_edges)
 
+        if clear_existing:
+            self.graph_store.clear()
+
         # Persist to relational and vector stores
         self.graph_store.insert_nodes(all_nodes)
         self.graph_store.insert_edges(all_edges)
@@ -45,7 +48,9 @@ class CodeGraphToolManager:
             "indexed_nodes": len(all_nodes),
             "internal_edges": len(all_edges) - len(cross_edges),
             "cross_repo_edges": len(cross_edges),
-            "repositories": list(repo_paths.keys())
+            "repositories": list(repo_paths.keys()),
+            "nodes": all_nodes,
+            "edges": all_edges
         }
 
     def get_symbol_definition(self, symbol_name: str, repo: Optional[str] = None) -> Dict[str, Any]:

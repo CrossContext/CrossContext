@@ -33,8 +33,8 @@ class SQLiteGraphStore:
             self.connection_str = str(self.db_path)
         else:
             self.connection_str = ":memory:"
-            # Retain open connection for in-memory database so tables persist
-            self._mem_conn = sqlite3.connect(":memory:")
+            # Retain open connection for in-memory database so tables persist across threads
+            self._mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
             self._mem_conn.row_factory = sqlite3.Row
 
         self._init_schema()
@@ -42,7 +42,7 @@ class SQLiteGraphStore:
     def _get_connection(self) -> sqlite3.Connection:
         if self._mem_conn is not None:
             return self._mem_conn
-        conn = sqlite3.connect(self.connection_str)
+        conn = sqlite3.connect(self.connection_str, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
@@ -131,8 +131,43 @@ class SQLiteGraphStore:
             conn.commit()
 
     # -------------------------------------------------------------
-    # Ingestion Methods
+    # Ingestion & Maintenance Methods
     # -------------------------------------------------------------
+
+    def clear(self) -> None:
+        """Clears all nodes and edges from the graph store."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM edges;")
+            conn.execute("DELETE FROM nodes;")
+            try:
+                conn.execute("DELETE FROM nodes_fts;")
+            except Exception:
+                pass
+            conn.commit()
+
+    def get_all_nodes(self) -> List[CodeNode]:
+        """Retrieves all nodes in the store."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM nodes")
+            return [self._row_to_node(r) for r in cursor.fetchall()]
+
+    def get_all_edges(self) -> List[CodeEdge]:
+        """Retrieves all edges in the store."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT caller_id, callee_id, edge_type, confidence, metadata_json FROM edges")
+            edges = []
+            for r in cursor.fetchall():
+                meta = json.loads(r["metadata_json"]) if r["metadata_json"] else {}
+                edge_type_val = r["edge_type"]
+                edge_type = EdgeType(edge_type_val) if edge_type_val in EdgeType._value2member_map_ else EdgeType.CALLS
+                edges.append(CodeEdge(
+                    caller_id=r["caller_id"],
+                    callee_id=r["callee_id"],
+                    edge_type=edge_type,
+                    confidence=float(r["confidence"]),
+                    metadata=meta
+                ))
+            return edges
 
     def insert_node(self, node: CodeNode) -> None:
         """Inserts or replaces a single CodeNode."""

@@ -1,6 +1,8 @@
 """
 OmniContext - Interactive Telemetry & Graph Visualizer Dashboard
 A high-impact Streamlit interface for live agent demonstration and evaluation during hackathon judging.
+Supports dynamic GitHub repository ingestion provided by the user, AST semantic graph exploration,
+autonomous agent execution with Bedrock Claude Sonnet 4, and quantitative benchmarks.
 Run with:
     streamlit run ui/app.py
 """
@@ -24,6 +26,7 @@ from mcp_server.parsers.treesitter_engine import TreeSitterEngine
 from mcp_server.parsers.scip_indexer import CrossRepoLinker
 from mcp_server.storage.sqlite_graph import SQLiteGraphStore
 from mcp_server.storage.opensearch_client import DualModeVectorStore
+from mcp_server.ingestion.github_ingester import GitHubRepoIngester
 from agent_orchestrator.agent import OmniContextAgent
 from ui.graph_visualizer import render_graph, build_legend
 from ui.telemetry_viewer import render_telemetry_panel, render_safety_report, render_agent_response
@@ -70,46 +73,131 @@ st.markdown("""
 
 # Initialize Session State
 if "db_initialized" not in st.session_state:
-    st.session_state.store = SQLiteGraphStore(":memory:")
-    st.session_state.parser = TreeSitterEngine()
-    st.session_state.linker = CrossRepoLinker()
-
-    # Auto-index testbed repos (including shared SDK)
-    repos_to_index = [
-        ("repo_auth_core", PROJECT_ROOT / "testbed" / "repo_auth_core"),
-        ("repo_frontend_portal", PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
-        ("repo_shared_sdk", PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
-    ]
-
-    all_nodes = []
-    all_edges = []
-    for repo_name, repo_dir in repos_to_index:
-        if repo_dir.exists():
-            nodes, edges = st.session_state.parser.parse_directory(repo_name, str(repo_dir))
-            all_nodes.extend(nodes)
-            all_edges.extend(edges)
-
-    cross_edges = st.session_state.linker.link_repositories(all_nodes)
-
-    st.session_state.store.insert_nodes(all_nodes)
-    st.session_state.store.insert_edges(all_edges + cross_edges)
-    st.session_state.all_nodes = all_nodes
-    st.session_state.all_edges = all_edges + cross_edges
     st.session_state.agent = OmniContextAgent(":memory:")
-    # Seed agent's internal store
-    st.session_state.agent.tool_manager.graph_store.insert_nodes(all_nodes)
-    st.session_state.agent.tool_manager.graph_store.insert_edges(all_edges + cross_edges)
+    st.session_state.store = st.session_state.agent.tool_manager.graph_store
+    st.session_state.parser = st.session_state.agent.tool_manager.parser
+    st.session_state.linker = st.session_state.agent.tool_manager.linker
+    st.session_state.ingester = GitHubRepoIngester()
+    st.session_state.repo_source = "testbed"  # "testbed" or "github"
+
+    # Auto-index testbed repos initially as a ready baseline
+    repos_to_index = {
+        "repo_auth_core": str(PROJECT_ROOT / "testbed" / "repo_auth_core"),
+        "repo_frontend_portal": str(PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
+        "repo_shared_sdk": str(PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
+    }
+    st.session_state.agent.tool_manager.index_repositories(repos_to_index, clear_existing=True)
+    st.session_state.all_nodes = st.session_state.store.get_all_nodes()
+    st.session_state.all_edges = st.session_state.store.get_all_edges()
     st.session_state.db_initialized = True
 
 
-# Sidebar Configuration
+# =============================================================
+# Sidebar Configuration & Dynamic Repository Ingestion
+# =============================================================
 st.sidebar.markdown("## ⚙️ Engine Settings")
 env_mode = os.getenv("ENV", "local").upper()
 st.sidebar.info(f"**Runtime Mode**: `{env_mode}` (AWS Strands + Bedrock Ready)")
 st.sidebar.markdown("---")
 
+# Section: Dynamic GitHub Repository Ingestion
+st.sidebar.markdown("### 📥 Dynamic GitHub Ingestion")
+st.sidebar.caption("Clone and index real repositories provided by the user.")
+
+ingest_mode = st.sidebar.radio(
+    "Source Mode:",
+    ["Custom GitHub URLs / Paths", "Preset Ecosystems"],
+    index=0
+)
+
+PRESETS = {
+    "FastAPI & Starlette": [
+        "https://github.com/fastapi/fastapi",
+        "https://github.com/encode/starlette"
+    ],
+    "Pallets: Flask & Werkzeug": [
+        "https://github.com/pallets/flask",
+        "https://github.com/pallets/werkzeug"
+    ],
+    "OmniContext (Self-Index)": [
+        "https://github.com/abhayrajjais01/OmniContext.git"
+    ]
+}
+
+if ingest_mode == "Preset Ecosystems":
+    preset_choice = st.sidebar.selectbox("Choose Ecosystem Preset:", list(PRESETS.keys()))
+    default_urls = "\n".join(PRESETS[preset_choice])
+else:
+    default_urls = "https://github.com/fastapi/fastapi\nhttps://github.com/encode/starlette"
+
+repo_urls_input = st.sidebar.text_area(
+    "Target Repository URLs (one per line):",
+    value=default_urls,
+    height=100,
+    help="Enter public GitHub URLs or absolute local directory paths."
+)
+
+clear_toggle = st.sidebar.checkbox("Wipe existing & replace graph", value=True)
+
+if st.sidebar.button("📥 Clone & Index Repositories", type="primary", use_container_width=True):
+    urls = [u.strip() for u in repo_urls_input.splitlines() if u.strip()]
+    if not urls:
+        st.sidebar.warning("Please enter at least one repository URL or path.")
+    else:
+        with st.sidebar.status("🔄 Ingesting Repositories...", expanded=True) as status_box:
+            status_text = st.empty()
+            pbar = st.progress(0.0)
+
+            def ui_progress_cb(stage: str, msg: str, pct: float):
+                status_text.markdown(f"**[{stage.upper()}]** {msg}")
+                pbar.progress(min(max(pct, 0.0), 1.0))
+
+            res = st.session_state.ingester.ingest_repositories(
+                urls,
+                st.session_state.agent.tool_manager,
+                clear_existing=clear_toggle,
+                progress_cb=ui_progress_cb
+            )
+
+            if res["status"] == "success":
+                st.session_state.all_nodes = st.session_state.store.get_all_nodes()
+                st.session_state.all_edges = st.session_state.store.get_all_edges()
+                st.session_state.repo_source = "github"
+                status_box.update(
+                    label=f"✅ Indexed {res['indexed_nodes']} symbols across {len(res['repositories'])} repos!",
+                    state="complete",
+                    expanded=False
+                )
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                status_box.update(label="❌ Ingestion failed", state="error")
+                for err in res.get("errors", []):
+                    st.sidebar.error(err)
+
+if st.session_state.repo_source == "github":
+    if st.sidebar.button("🔄 Reset to Demo Testbeds", use_container_width=True):
+        repos_to_index = {
+            "repo_auth_core": str(PROJECT_ROOT / "testbed" / "repo_auth_core"),
+            "repo_frontend_portal": str(PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
+            "repo_shared_sdk": str(PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
+        }
+        st.session_state.agent.tool_manager.index_repositories(repos_to_index, clear_existing=True)
+        st.session_state.all_nodes = st.session_state.store.get_all_nodes()
+        st.session_state.all_edges = st.session_state.store.get_all_edges()
+        st.session_state.repo_source = "testbed"
+        st.rerun()
+
+st.sidebar.markdown("---")
+
 st.sidebar.markdown("### 📦 Indexed Repositories")
 stats = st.session_state.store.get_stats()
+
+# Source badge
+if st.session_state.repo_source == "github":
+    st.sidebar.markdown('<span style="background-color:#065F46; color:#34D399; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem;">🟢 REAL GITHUB REPOSITORIES</span>', unsafe_allow_html=True)
+else:
+    st.sidebar.markdown('<span style="background-color:#78350F; color:#FCD34D; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem;">🟡 DEMO TESTBED REPOSITORIES</span>', unsafe_allow_html=True)
 
 # Color-coded repo list from graph_visualizer
 legend = build_legend(stats["repositories"])
@@ -126,9 +214,16 @@ st.sidebar.markdown("---")
 st.sidebar.caption("WeMakeDevs Bharat Builds Tour 'First Commit' Hackathon")
 
 
-# Main Dashboard Header
+# =============================================================
+# Main Dashboard Header & Callouts
+# =============================================================
 st.markdown('<div class="main-header">OmniContext: Cross-Repository Code Context Engine</div>', unsafe_allow_html=True)
 st.caption("Deterministic AST Semantic Knowledge Graph & Autonomous AWS Strands Orchestrator")
+
+if st.session_state.repo_source == "github":
+    st.success(f"✨ **Live Dynamic Repos Active**: The deterministic knowledge graph is currently loaded with real repositories: `{', '.join(stats['repositories'])}`. All AST symbols and blast-radius traversals reflect actual source code.")
+else:
+    st.info("💡 **Demo Testbed Mode**: Loaded with synthetic testbeds (`repo_auth_core`, `repo_frontend_portal`, `repo_shared_sdk`). You can clone and index any real GitHub repositories using the sidebar on the left.")
 
 tabs = st.tabs(["🚀 Agent Execution", "🕸️ Cross-Repo Graph", "📊 Benchmarks"])
 
@@ -139,7 +234,26 @@ with tabs[0]:
     st.subheader("Autonomous Multi-Repository Task Execution")
     st.markdown("Enter a task spanning multiple repositories. The agent will traverse semantic call graphs to detect dependencies and formulate a migration plan.")
 
-    default_prompt = "Deprecate legacy /v1/auth/verify endpoint and update all downstream frontend consumers to /v2/auth/token."
+    # Dynamically formulate prompt suggestion based on active repos and symbols
+    all_sym_names = [n.symbol_name for n in st.session_state.all_nodes]
+    if st.session_state.repo_source == "github" and all_sym_names:
+        suggested_sym = all_sym_names[0]
+        suggested_repo = stats["repositories"][0] if stats["repositories"] else "target_repo"
+        default_prompt = f"Analyze cross-repo blast radius for `{suggested_sym}` in `{suggested_repo}` and generate a migration plan for any dependent consumer services."
+    else:
+        default_prompt = "Deprecate legacy /v1/auth/verify endpoint and update all downstream frontend consumers to /v2/auth/token."
+
+    # Quick symbol selector for instant prompt drafting
+    if all_sym_names:
+        sample_symbols = all_sym_names[:30]
+        col_s1, col_s2 = st.columns([1, 4])
+        with col_s1:
+            st.caption("🎯 Quick Target Symbol:")
+        with col_s2:
+            quick_sym = st.selectbox("Insert Symbol into Task:", ["(Choose from indexed symbols)"] + sample_symbols, label_visibility="collapsed")
+            if quick_sym != "(Choose from indexed symbols)":
+                default_prompt = f"Trace all downstream dependencies and callers for `{quick_sym}` across all indexed repositories and formulate an impact analysis."
+
     user_prompt = st.text_area("Task Directive:", value=default_prompt, height=80)
 
     col1, col2 = st.columns([1, 4])
@@ -185,7 +299,7 @@ with tabs[1]:
     st.markdown("Explore the deterministic code graph. Nodes are color-coded by repository. Click nodes to inspect details.")
 
     # Filter controls
-    col_filter, col_search = st.columns([1, 2])
+    col_filter, col_search, col_limit = st.columns([1, 2, 1])
     with col_filter:
         repo_filter = st.selectbox(
             "Filter by Repository",
@@ -193,19 +307,21 @@ with tabs[1]:
             index=0
         )
     with col_search:
-        search_query = st.text_input("🔍 Search Symbols", placeholder="e.g., verify_auth, LoginForm")
+        search_query = st.text_input("🔍 Search Symbols", placeholder="e.g., verify_auth, route, client")
+    with col_limit:
+        node_limit = st.selectbox("Max Graph Nodes", [50, 100, 200, "All"], index=1)
 
     # Prepare graph data
     selected_repo = None if repo_filter == "All Repositories" else repo_filter
 
     # Get nodes and edges from session state
-    graph_nodes = []
+    matching_nodes = []
     for n in st.session_state.all_nodes:
         if selected_repo and n.repo != selected_repo:
             continue
         if search_query and search_query.lower() not in n.symbol_name.lower():
             continue
-        graph_nodes.append({
+        matching_nodes.append({
             "id": n.id,
             "symbol_name": n.symbol_name,
             "symbol_type": n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else n.symbol_type,
@@ -214,6 +330,14 @@ with tabs[1]:
             "start_line": n.start_line,
             "end_line": n.end_line,
         })
+
+    # Apply node display limit for smooth canvas rendering
+    total_matching = len(matching_nodes)
+    if node_limit != "All" and total_matching > int(node_limit):
+        graph_nodes = matching_nodes[:int(node_limit)]
+        st.caption(f"⚡ Displaying **{len(graph_nodes)}** of **{total_matching}** matching symbols for optimal performance. Use search or repository filters to inspect specific symbols.")
+    else:
+        graph_nodes = matching_nodes
 
     graph_edges = []
     graph_node_ids = {n["id"] for n in graph_nodes}
@@ -251,7 +375,18 @@ with tabs[1]:
     # Traversal inspector
     st.markdown("---")
     st.markdown("#### 🔎 Blast Radius Inspector")
-    inspect_symbol = st.text_input("Enter symbol name to trace:", value="verify_legacy_auth")
+    col_b1, col_b2 = st.columns([2, 1])
+
+    unique_symbols = sorted(list(set(n.symbol_name for n in st.session_state.all_nodes)))
+    default_inspect = "verify_legacy_auth" if "verify_legacy_auth" in unique_symbols else (unique_symbols[0] if unique_symbols else "")
+
+    with col_b1:
+        inspect_symbol = st.text_input("Enter symbol name to trace:", value=default_inspect)
+    with col_b2:
+        quick_inspect = st.selectbox("Or Quick-Select Symbol:", ["(Select Symbol)"] + unique_symbols[:60])
+        if quick_inspect != "(Select Symbol)":
+            inspect_symbol = quick_inspect
+
     if inspect_symbol:
         traversal = st.session_state.store.traverse_blast_radius(inspect_symbol, max_depth=3)
         st.info(traversal.summary())
@@ -274,20 +409,20 @@ with tabs[2]:
     st.subheader("Quantitative Evaluation: Naive RAG vs OmniContext Code Graph")
     st.markdown("Benchmarked against RepoQA Search Needle Function and CodeScaleBench Cross-Repo Dependency Tracing methodologies.")
 
-    # Benchmark data
-    benchmark_data = {
-        "Metric": [
-            "Context Tokens",
-            "Cross-Repo Tracing",
-            "Boundary Precision",
-            "Hallucination Rate",
-            "Token Efficiency"
-        ],
-        "Naive RAG": [14500, 0, 35, 42, 8],
-        "OmniContext": [120, 100, 100, 0, 92],
-        "Unit": ["tokens", "%", "%", "%", "%"],
-        "Lower is Better": [True, False, False, True, False]
-    }
+    # Live Index Summary
+    st.markdown("### 📊 Active Repository Health")
+    live_cols = st.columns(4)
+    with live_cols[0]:
+        st.metric("Indexed Repositories", len(stats["repositories"]))
+    with live_cols[1]:
+        st.metric("Deterministic Symbols", stats["total_symbols"])
+    with live_cols[2]:
+        st.metric("Relational Edges", stats["total_edges"])
+    with live_cols[3]:
+        active_src = "Live GitHub" if st.session_state.repo_source == "github" else "Demo Testbeds"
+        st.metric("Active Dataset", active_src)
+
+    st.markdown("---")
 
     # --- KPI Delta Cards ---
     st.markdown("### ⚡ Key Performance Indicators")
