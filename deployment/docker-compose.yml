@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  omnicontext-agent:
+  crosscontext-agent:
     build:
       context: ..
       dockerfile: deployment/Dockerfile
-    container_name: omnicontext-agentcore
+    container_name: crosscontext-agentcore
     environment:
       - ENV=local
-      - SQLITE_DB_PATH=/app/data/omnicontext_graph.db
+      - SQLITE_DB_PATH=/app/data/crosscontext_graph.db
       - AWS_REGION=us-east-1
     volumes:
       - ../data:/app/data
@@ -17,18 +17,19 @@ services:
       - "8080:8080"
     restart: unless-stopped
 
-  omnicontext-ui:
+  crosscontext-ui:
     build:
       context: ..
       dockerfile: deployment/Dockerfile
-    container_name: omnicontext-dashboard
-    command: ["streamlit", "run", "ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    container_name: crosscontext-dashboard
+    command: ["python", "-m", "ui.api_server"]
     environment:
       - ENV=local
-      - SQLITE_DB_PATH=/app/data/omnicontext_graph.db
+      - SQLITE_DB_PATH=/app/data/crosscontext_graph.db
+      - PORT=8000
     volumes:
       - ../data:/app/data
     ports:
-      - "8501:8501"
+      - "8000:8000"
     depends_on:
-      - omnicontext-agent
+      - crosscontext-agent

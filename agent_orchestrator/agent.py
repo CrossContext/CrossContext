@@ -1,5 +1,5 @@
 """
-OmniContext - Autonomous Code Graph Agent Loop
+CrossContext - Autonomous Code Graph Agent Loop
 Orchestrates multi-turn cross-repository reasoning using AWS Strands pattern.
 """
 
@@ -14,7 +14,7 @@ from mcp_server.tools import CodeGraphToolManager
 
 
 SYSTEM_PROMPT = """
-You are OmniContext Agent, an autonomous platform engineer specialized in cross-repository architectures.
+You are CrossContext Agent, an autonomous platform engineer specialized in cross-repository architectures.
 Your objective is to solve multi-repository code deprecation, refactoring, and dependency problems.
 
 You have access to a deterministic Code Graph MCP server with the following capabilities:
@@ -94,8 +94,8 @@ TOOLS_SCHEMA = [
 ]
 
 
-class OmniContextAgent:
-    def __init__(self, db_path: str = "data/omnicontext_graph.db"):
+class CrossContextAgent:
+    def __init__(self, db_path: str = "data/crosscontext_graph.db"):
         self.model_provider = ModelProvider()
         self.tool_manager = CodeGraphToolManager(db_path=db_path)
         self.session_manager = SessionManager()
@@ -234,4 +234,8 @@ class OmniContextAgent:
             "telemetry": telemetry,
             "safety_report": safety_report
         }
+
+
+# Backward-compatibility alias
+OmniContextAgent = CrossContextAgent
 

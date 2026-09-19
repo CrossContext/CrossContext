@@ -1,5 +1,5 @@
 """
-OmniContext - Dual-Mode Vector Store Adapter
+CrossContext - Dual-Mode Vector Store Adapter
 Supports both:
 1. Cloud Mode (ENV=aws): Amazon OpenSearch Serverless (AOSS) + Amazon Titan Text Embeddings v2
 2. Local Mode (ENV=local): In-memory cosine similarity & lexical cache (Zero AWS credentials needed)
@@ -67,7 +67,7 @@ class DualModeVectorStore:
     def __init__(self):
         self.env = os.getenv("ENV", "local").lower()
         self.aoss_endpoint = os.getenv("AOSS_ENDPOINT", "")
-        self.index_name = os.getenv("AOSS_INDEX_NAME", "omnicontext-code-index")
+        self.index_name = os.getenv("AOSS_INDEX_NAME", "crosscontext-code-index")
         self.region = os.getenv("AWS_REGION", "us-east-1")
         
         self.embedding_client = TitanEmbeddingClient(region_name=self.region)

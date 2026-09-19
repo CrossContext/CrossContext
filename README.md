@@ -1,4 +1,4 @@
-# OmniContext: Cross-Repository Code Context Engine
+# CrossContext: Cross-Repository Code Context Engine
 ### Deterministic Code Knowledge Graph & Autonomous Agent Context Engine for Multi-Repo Systems
 
 [![Built on AWS](https://img.shields.io/badge/Built%20on-Amazon%20Web%20Services-FF9900?logo=amazon-aws&logoColor=white)](https://aws.amazon.com)
@@ -11,7 +11,7 @@ Built for the **WeMakeDevs Bharat Builds Tour "First Commit" Hackathon** (Septem
 
 ---
 
-## 💡 What is OmniContext? (In Plain English)
+## 💡 What is CrossContext? (In Plain English)
 
 When software teams build modern applications, their code is almost never in a single folder. It is spread across **multiple different repositories**—for example, a backend API repository (FastAPI / Go), a frontend web application (React / Next.js / TypeScript), and a shared core SDK.
 
@@ -20,16 +20,16 @@ Today's AI coding tools struggle with this setup:
 - **They waste thousands of tokens**: Traditional search dumps entire files into the AI chat. This quickly runs out of memory, costs a lot of money, and causes the AI to hallucinate or get confused.
 - **They cause silent bugs in production**: Because the AI doesn't trace dependencies across repositories, breaking changes slip into production unnoticed.
 
-### What OmniContext Does
-**OmniContext is an intelligent context engine that builds a real-time, compiler-accurate map (a code knowledge graph) connecting all your repositories together.**
+### What CrossContext Does
+**CrossContext is an intelligent context engine that builds a real-time, compiler-accurate map (a code knowledge graph) connecting all your repositories together.**
 
 It inspects your actual code syntax, understands which functions call which endpoints across different services, and feeds an autonomous AI agent (powered by Amazon Bedrock Claude Sonnet 4) only the **exact** lines of code it needs to safely plan refactors, deprecations, and multi-repository migrations.
 
 ---
 
-## 🎯 How OmniContext Helps You
+## 🎯 How CrossContext Helps You
 
-| Challenge | What Traditional AI Tools Do | How OmniContext Solves It |
+| Challenge | What Traditional AI Tools Do | How CrossContext Solves It |
 | :--- | :--- | :--- |
 | **Cross-Repo Awareness** | Treats each repository as an isolated silo. Cannot tell that `fetch('/v1/auth')` in the frontend relies on `@router.post('/v1/auth')` in the backend. | **100% Cross-Repo Recall**: Automatically maps callers, callees, imports, and API routes across repository boundaries. |
 | **Token Cost & Speed** | Dumps whole files (14,500+ tokens) into the context window, causing slow responses and high API costs. | **97.6% Token Reduction**: Retrieves only the exact AST-bounded function chunks (~120 tokens), responding in sub-milliseconds. |
@@ -39,7 +39,7 @@ It inspects your actual code syntax, understands which functions call which endp
 
 ---
 
-## 🚀 How to Use OmniContext (Step-by-Step)
+## 🚀 How to Use CrossContext (Step-by-Step)
 
 ### 1. Quick Installation (3 Minutes)
 
@@ -50,8 +50,8 @@ It inspects your actual code syntax, understands which functions call which endp
 #### Clone & Install
 ```bash
 # Clone the repository
-git clone https://github.com/abhayrajjais01/OmniContext.git
-cd OmniContext
+git clone https://github.com/abhayrajjais01/CrossContext.git
+cd CrossContext
 
 # Create and activate a Python virtual environment
 # On Windows PowerShell:
@@ -83,43 +83,44 @@ cp .env.example .env
 
 ### 2. Method 1: The Interactive Web Dashboard (Recommended)
 
-Launch the visual dashboard in your browser:
+CrossContext features a unified React 19 + Vite web application powered by a FastAPI backend engine with a 2D interactive canvas.
+
+Launch the backend API and web interface:
 ```bash
-streamlit run ui/app.py
+python -m ui.api_server
 ```
-Open your browser at **`http://localhost:8501`**.
+Open your browser at **`http://localhost:8000`** (or run `pnpm run dev` in `ui_react` on **`http://localhost:5173`** for frontend live reload).
 
 Here is what you can do in the dashboard:
 
-1. **📥 Ingest Real GitHub Repositories (Sidebar)**:
-   - On the left sidebar under **Dynamic GitHub Ingestion**, type or paste any GitHub URLs (one per line).
-   - Or pick a preset:
-     - *FastAPI & Starlette* (`https://github.com/fastapi/fastapi`, `https://github.com/encode/starlette`)
-     - *Pallets: Flask & Werkzeug* (`https://github.com/pallets/flask`, `https://github.com/pallets/werkzeug`)
-     - *OmniContext (Self-Index)* (`https://github.com/abhayrajjais01/OmniContext.git`)
-   - Click **📥 Clone & Index Repositories**. The engine will shallow-clone the repositories, parse all AST symbols, connect cross-repo routes, and reload the dashboard with live data.
-   - You can click **🔄 Reset to Demo Testbeds** at any time to return to the sample microservices testbed.
+1. **Ingest Real GitHub Repositories or Organizations (`+ Ingest Repos`)**:
+   - Click **`+ Ingest Repos`** in the top navigation bar.
+   - Enter any GitHub Organization URL or name (e.g., `https://github.com/meshery`, `https://github.com/pallets`) to auto-discover and index all public repositories.
+   - Or enter custom comma-separated GitHub repository URLs.
+   - The engine shallow-clones the repositories, parses deterministic AST symbols, links cross-repo HTTP/import contracts, and updates the graph in real-time.
 
-2. **🚀 Run the Autonomous Agent (Tab 1: Agent Execution)**:
-   - Enter a cross-repository directive (for example: *"Deprecate legacy /v1/auth/verify endpoint and update all downstream frontend consumers to /v2/auth/token"*).
-   - Or pick a symbol from the **🎯 Quick Target Symbol** dropdown to auto-draft a task for any symbol found in your indexed code.
-   - Click **⚡ Execute Agent Loop**. Watch the agent traverse the graph, inspect caller functions, and generate a step-by-step cross-repository migration plan.
-   - Inspect the **Safety Guardrail Report** (cycle detection, token budget enforcement, and execution telemetry).
+2. **Agent Task & Graph (Tab 1)**:
+   - Enter a cross-repository directive (e.g. *"Deprecate legacy /v1/auth/verify endpoint and update all downstream frontend consumers to /v2/auth/token"*).
+   - Click **run** to trigger the autonomous agent loop with cycle-detection guardrails and deterministic blast radius tracing.
+   - View synchronized cross-repository diffs and unified git pull requests directly in the dual PR review drawer.
+   - Navigate the interactive 2D AST semantic graph with pan, zoom, and micro-node inspection.
 
-3. **🕸️ Explore the Cross-Repo Graph (Tab 2: Cross-Repo Graph)**:
-   - View the color-coded interactive dependency graph.
-   - Filter by repository or search for specific symbols (functions, classes, endpoints).
-   - Use the **Max Graph Nodes** selector for ultra-fast rendering on massive codebases.
-   - Scroll down to the **🔎 Blast Radius Inspector**: enter or select any symbol name to see its entire blast radius—every file and line that calls it or depends on it across repositories.
+3. **Org Architecture Blueprint & AI Context (Tab 2)**:
+   - Automated architectural synthesis of all indexed repositories and cross-repo API contracts.
+   - Inter-repository API contract matrix mapping consumer files and symbols to producer endpoints.
+   - One-click **Copy Prompt** or **Download ORG_CONTEXT.txt** for feeding compressed multi-repo context into Cursor, Claude Code, or Copilot.
 
-4. **📊 View Empirical Benchmarks (Tab 3: Benchmarks)**:
-   - Review side-by-side quantitative comparisons showing OmniContext's **97.6% token reduction** and **100% cross-repo recall** against standard Naive RAG.
+4. **Interactive Code Explorer (Tab 3)**:
+   - Browse repository directories and inspect raw source code and deterministic symbols with syntax highlighting and line numbers.
+
+5. **Empirical Benchmarks (Tab 4)**:
+   - Review side-by-side quantitative comparisons showing CrossContext's **94.9% token reduction** and **100% cross-repo recall** against standard Naive RAG on RepoQA and CodeScaleBench.
 
 ---
 
 ### 3. Method 2: Command-Line Interface (CLI)
 
-You can also run all OmniContext tools directly from the terminal:
+You can also run all CrossContext tools directly from the terminal:
 
 #### Index Real GitHub Repositories via CLI
 ```bash
@@ -149,7 +150,7 @@ python evaluation/run_benchmarks.py
 
 ### 4. Method 3: As a Model Context Protocol (MCP) Server
 
-OmniContext can act as a standard **Model Context Protocol (MCP)** server, providing deterministic code graph tools to external AI coding environments like **Claude Desktop**, **Cursor**, **Windsurf**, or custom agent frameworks:
+CrossContext can act as a standard **Model Context Protocol (MCP)** server, providing deterministic code graph tools to external AI coding environments like **Claude Desktop**, **Cursor**, **Windsurf**, or custom agent frameworks:
 
 ```bash
 python mcp_server/server.py
@@ -211,13 +212,13 @@ flowchart TB
 
 ---
 
-## 📊 Benchmark Results: OmniContext vs. Standard RAG
+## 📊 Benchmark Results: CrossContext vs. Standard RAG
 
 Tested against the **RepoQA** (needle in a haystack) and **CodeScaleBench** (cross-repo dependency tracing) methodologies:
 
-| Metric | Traditional Naive RAG | OmniContext (AST Code Graph) | What This Means |
+| Metric | Traditional Naive RAG | CrossContext (AST Code Graph) | What This Means |
 | :--- | :--- | :--- | :--- |
-| **Cross-Repo Recall** | `0%` (Fails to link repos) | **`100%`** | OmniContext always catches cross-repo connections. |
+| **Cross-Repo Recall** | `0%` (Fails to link repos) | **`100%`** | CrossContext always catches cross-repo connections. |
 | **Context Overhead** | `~14,500 tokens` | **`~120 tokens`** | **97.6% token reduction**, saving money and time. |
 | **Hallucinated Files** | `42%` | **`0%`** | Grounded in exact compiler AST boundaries. |
 | **Blast Radius Detection** | Failed (Silent production breaks) | **Complete (100% of callers caught)** | Zero unexpected downstream breakages. |
@@ -227,13 +228,13 @@ Tested against the **RepoQA** (needle in a haystack) and **CodeScaleBench** (cro
 
 ## ☁️ "Built on AWS" Cloud Architecture
 
-OmniContext is fully integrated with Amazon Web Services:
+CrossContext is fully integrated with Amazon Web Services:
 
-| AWS Service | Component Used | Purpose in OmniContext |
+| AWS Service | Component Used | Purpose in CrossContext |
 | :--- | :--- | :--- |
 | **Amazon Bedrock** | **Anthropic Claude Sonnet 4** (`us.anthropic.claude-sonnet-4-20250514-v1:0`) | Multi-turn reasoning, cross-repository tool orchestration, and migration planning. |
 | **Amazon Bedrock** | **Amazon Titan Text Embeddings v2** (`amazon.titan-embed-text-v2:0`) | Generates 1024-dimensional dense vectors for semantic conceptual search. |
-| **Amazon OpenSearch Serverless** | **AOSS Collection (`omnicontext-code-index`)** | Serverless vector database executing k-NN similarity search over code chunks. |
+| **Amazon OpenSearch Serverless** | **AOSS Collection (`crosscontext-code-index`)** | Serverless vector database executing k-NN similarity search over code chunks. |
 | **AWS Strands SDK** | **Agent Loop & Lifecycle Hooks** | Model-driven autonomous execution loop with safety guardrails. |
 | **Amazon Bedrock AgentCore** | **Serverless Container Runtime** | Containerized deployment using `@app.entrypoint` for cloud execution. |
 

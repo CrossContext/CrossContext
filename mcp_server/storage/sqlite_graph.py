@@ -1,5 +1,5 @@
 """
-OmniContext - SQLite Relational Graph Store
+CrossContext - SQLite Relational Graph Store
 Maintains the deterministic directional edge matrix (callers, callees, imports, API consumers)
 and provides sub-millisecond lexical FTS5 searching across multi-repository symbols.
 """

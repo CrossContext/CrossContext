@@ -1,5 +1,5 @@
 """
-OmniContext - Model Context Protocol (MCP) Server
+CrossContext - Model Context Protocol (MCP) Server
 Standardized JSON-RPC Gatekeeper decoupling multi-repo code state from agent reasoning.
 Run with:
     python -m mcp_server.server
@@ -18,8 +18,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp_server.tools import CodeGraphToolManager
 
 # Initialize FastMCP Server
-mcp = FastMCP("OmniContext-CodeGraph-Server")
-manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
+mcp = FastMCP("CrossContext-CodeGraph-Server")
+manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
 
 
 @mcp.tool()

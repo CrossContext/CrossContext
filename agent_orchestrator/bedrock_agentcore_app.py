@@ -1,5 +1,5 @@
 """
-OmniContext - AWS Bedrock AgentCore Production Runtime Entrypoint
+CrossContext - AWS Bedrock AgentCore Production Runtime Entrypoint
 Deploys the agent within the AWS AgentCore serverless container runtime.
 """
 
@@ -13,9 +13,9 @@ from typing import Dict, Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agent_orchestrator.agent import OmniContextAgent
+from agent_orchestrator.agent import CrossContextAgent
 
-agent = OmniContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
+agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
 
 
 async def entrypoint(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:

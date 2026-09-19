@@ -1,0 +1,45 @@
+# ===================================================================
+# OMNICONTEXT FEDERATED ORGANIZATION CODEBASE BLUEPRINT
+# Generated for Autonomous AI Agents | Total Repositories: 3
+# ===================================================================
+
+## 1. REPOSITORY INVENTORY & ARCHITECTURAL ROLES
+- Repo: `repo_auth_core` (Python) | Files: 4 | Symbols: 18
+  Exported Endpoints: verify_auth_v1, create_token_v1, verify_auth_v2, create_token_v2, health_check, health_check, verify_legacy_auth, generate_v2_auth_token
+- Repo: `repo_frontend_portal` (TypeScript) | Files: 5 | Symbols: 12
+- Repo: `repo_shared_sdk` (Python) | Files: 2 | Symbols: 6
+
+## 2. CROSS-REPOSITORY API CONTRACT MATRIX
+# Format: [Consumer Repo/File] -> (Relationship) -> [Producer Repo/File: Symbol]
+- [repo_frontend_portal] src/api/authClient.ts (verifySessionToken) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
+- [repo_frontend_portal] src/api/authClient.ts (loginWithCredentials) --consumes_api--> [repo_auth_core] main.py: `create_token_v1`
+- [repo_frontend_portal] src/services/authClient.ts (verifyUserSession) --consumes_api--> [repo_auth_core] src/api/auth.py: `verify_legacy_auth`
+- [repo_shared_sdk] auth_sdk/client.py (AuthCoreClient) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
+- [repo_shared_sdk] auth_sdk/client.py (verify_token) --consumes_api--> [repo_auth_core] main.py: `verify_auth_v1`
+
+## 3. DETERMINISTIC SYMBOL MAP & AST BOUNDARIES
+# Use this index to locate exact functions/classes without full-repo scans.
+
+### `repo_auth_core`
+  - `main.py`: `TokenRequest` (class: L13-15), `TokenResponse` (class: L18-22), `UserProfile` (class: L25-29), `verify_jwt_token` (function: L32-36), `validate_v1_legacy_signature` (function: L39-41), `verify_auth_v1` (endpoint: L45-55), `create_token_v1` (endpoint: L59-61), `verify_auth_v2` (endpoint: L65-71), `create_token_v2` (endpoint: L75-82), `health_check` (endpoint: L86-88)
+  - `security.py`: `hash_password` (function: L8-10), `generate_session_cookie` (function: L13-16), `verify_session_cookie` (function: L19-26)
+  - `src/api/auth.py`: `LegacyAuthRequest` (class: L12-14), `TokenResponse` (class: L17-20), `verify_legacy_auth` (endpoint: L24-31), `generate_v2_auth_token` (endpoint: L35-45)
+  - `src/main.py`: `health_check` (endpoint: L17-18)
+
+### `repo_frontend_portal`
+  - `src/api/authClient.ts`: `AuthSession` (interface: L6-10), `VerificationResult` (interface: L12-16), `verifySessionToken` (function: L29-43), `loginWithCredentials` (function: L48-57)
+  - `src/components/LoginForm.tsx`: `handleVerify` (function: L13-22)
+  - `src/hooks/useAuth.ts`: `AuthState` (interface: L9-14), `useAuth` (function: L16-48)
+  - `src/hooks/useAuthSession.ts`: `useAuthSession` (function: L8-31)
+  - `src/services/authClient.ts`: `LegacyVerifyResponse` (interface: L6-10), `V2TokenResponse` (interface: L12-16), `verifyUserSession` (function: L22-30), `authenticatePortalUser` (function: L42-45)
+
+### `repo_shared_sdk`
+  - `auth_sdk/client.py`: `AuthCoreClient` (class: L7-24), `__init__` (method: L10-11), `verify_token` (method: L13-19), `get_user_claims` (method: L21-24)
+  - `auth_sdk/models.py`: `ClientSession` (class: L8-12), `AuthConfig` (class: L16-19)
+
+# ===================================================================
+# INSTRUCTIONS FOR CODING AGENT:
+# 1. When modifying an endpoint, verify all consumer files listed in Section 2.
+# 2. Use line numbers in Section 3 to request targeted diffs without reading entire files.
+# 3. Never invent cross-repo communication protocols; adhere to contracts in Section 2.
+# ===================================================================
