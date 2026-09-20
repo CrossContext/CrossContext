@@ -129,6 +129,8 @@ function CrossRepoGraph({
   const [zoom, setZoom] = useState<number>(0.9)
   const [isDragging, setIsDragging] = useState(false)
   const isDraggingRef = useRef(false)
+  const dragMovedRef = useRef(false)
+  const dragOriginRef = useRef<{ clientX: number; clientY: number }>({ clientX: 0, clientY: 0 })
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -221,33 +223,49 @@ function CrossRepoGraph({
   // Smooth pointer pan handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return
-    e.preventDefault()
-    e.stopPropagation()
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {}
     isDraggingRef.current = true
-    setIsDragging(true)
+    dragMovedRef.current = false
+    dragOriginRef.current = { clientX: e.clientX, clientY: e.clientY }
     dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return
-    e.preventDefault()
-    e.stopPropagation()
-    setPan({
-      x: e.clientX - dragStartRef.current.x,
-      y: e.clientY - dragStartRef.current.y,
-    })
+    const dx = Math.abs(e.clientX - dragOriginRef.current.clientX)
+    const dy = Math.abs(e.clientY - dragOriginRef.current.clientY)
+
+    if (!dragMovedRef.current && (dx > 3 || dy > 3)) {
+      dragMovedRef.current = true
+      setIsDragging(true)
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {}
+    }
+
+    if (dragMovedRef.current) {
+      e.preventDefault()
+      setPan({
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y,
+      })
+    }
   }
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDraggingRef.current) {
+      if (dragMovedRef.current) {
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+        } catch {}
+      } else {
+        const target = e.target as HTMLElement
+        if (target === containerRef.current || target.tagName === 'svg' || target.tagName === 'path') {
+          onSelect(null)
+        }
+      }
       isDraggingRef.current = false
+      dragMovedRef.current = false
       setIsDragging(false)
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId)
-      } catch {}
     }
   }
 
@@ -553,9 +571,21 @@ function CrossRepoGraph({
               return (
                 <div
                   key={n.id}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                  }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    onSelect(isSelected ? null : n.id)
+                    if (isSelected) {
+                      onSelect(null)
+                    } else {
+                      onSelect(n.id)
+                      focusNode(n)
+                    }
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    focusNode(n)
                   }}
                   style={{
                     position: 'absolute',
@@ -575,9 +605,10 @@ function CrossRepoGraph({
                     boxShadow: isSelected
                       ? '0 4px 14px rgba(0,0,0,0.2)'
                       : (isCaller ? '0 2px 10px rgba(220, 38, 38, 0.2)' : '0 1px 3px rgba(0,0,0,0.04)'),
-                    transition: 'border 0.15s, box-shadow 0.15s, opacity 0.15s',
+                    transition: 'border 0.15s, box-shadow 0.15s, opacity 0.15s, transform 0.1s',
+                    zIndex: isSelected ? 15 : (isConnected ? 10 : 2),
                   }}
-                  title={`${n.label} (${n.repo})\n${n.file_path || ''}:${n.start_line || 1}`}
+                  title={`${n.label} (${n.repo})\n${n.file_path || ''}:${n.start_line || 1}\nClick to inspect & compute blast radius\nDouble-click to center`}
                 >
                   <div style={{
                     width: 5,
