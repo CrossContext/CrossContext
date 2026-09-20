@@ -387,14 +387,14 @@ function CrossRepoGraph({
   }, [priorityTab, priorityMatrix, searchQuery])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', height: '100%', background: '#FAFAFA', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100%', background: 'var(--color-canvas-bg)', overflow: 'hidden' }}>
       {/* Main Canvas Column */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
         {/* Canvas Toolbar */}
         <div style={{
           display: 'flex', flexDirection: 'column',
           borderBottom: '1px solid var(--color-border)', flexShrink: 0,
-          background: 'white', zIndex: 10,
+          background: 'var(--color-header-bg)', zIndex: 10,
         }}>
           {/* Main Top Bar */}
           <div style={{
@@ -408,10 +408,10 @@ function CrossRepoGraph({
               title={`All ${repos.length} repositories (${nodes.length} symbols)`}
               style={{
                 padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: repoFilter === null ? '#111' : 'white',
-                color: repoFilter === null ? 'white' : 'var(--color-text-muted)',
+                background: repoFilter === null ? 'var(--color-btn-primary-bg)' : 'var(--color-card-bg)',
+                color: repoFilter === null ? 'var(--color-btn-primary-text)' : 'var(--color-text-muted)',
                 border: '1px solid',
-                borderColor: repoFilter === null ? '#111' : 'var(--color-border)',
+                borderColor: repoFilter === null ? 'var(--color-btn-primary-bg)' : 'var(--color-border)',
                 borderRadius: 2, cursor: 'pointer', fontWeight: repoFilter === null ? 600 : 400,
               }}
             >
@@ -423,39 +423,78 @@ function CrossRepoGraph({
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: getRepoColor(repoFilter).main, color: 'white',
-                borderRadius: 2, fontWeight: 600,
+                background: getRepoColor(repoFilter).bg,
+                border: `1px solid ${getRepoColor(repoFilter).border}`,
+                borderRadius: 2, color: getRepoColor(repoFilter).main, fontWeight: 600,
               }}>
-                <span>{repoFilter.replace('repo_', '')}</span>
+                <span>{repoFilter}</span>
                 <span
-                  onClick={(e) => { e.stopPropagation(); setRepoFilter(null); }}
-                  style={{ cursor: 'pointer', opacity: 0.85, fontSize: 12, lineHeight: 1 }}
+                  onClick={() => setRepoFilter(null)}
+                  style={{ cursor: 'pointer', opacity: 0.7, fontSize: 11, marginLeft: 2 }}
                   title="Clear filter"
                 >
-                  &times;
+                  ✕
                 </span>
               </div>
             )}
 
-            {/* Scope List Toggle Button for Large Orgs */}
+            {/* Inactive Repositories Dropdown Trigger */}
             {repos.length > 0 && (
               <button
                 onClick={() => setShowScopeList(v => !v)}
-                title={showScopeList ? 'Hide repository scope filters' : 'Show repository scope filters'}
                 style={{
-                  padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                  background: showScopeList ? '#f3f4f6' : 'white',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 2, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 4,
-                  fontWeight: 500,
+                  padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                  background: showScopeList ? 'var(--color-surface-2)' : 'var(--color-card-bg)',
+                  color: showScopeList ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  border: `1px solid ${showScopeList ? 'var(--color-text)' : 'var(--color-border)'}`,
+                  borderRadius: 2, cursor: 'pointer',
                 }}
               >
-                <span>{showScopeList ? 'Hide scope tags' : `Filter by repo (${repos.length})`}</span>
-                <span style={{ fontSize: 8 }}>{showScopeList ? '▲' : '▼'}</span>
+                <span>Select repo ({repos.length})</span>
+                <span style={{ fontSize: 9 }}>{showScopeList ? '▲' : '▼'}</span>
               </button>
             )}
+
+            {/* Canvas View Controls (Zoom, Reset) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+              <button
+                onClick={() => zoomTo(zoom / 1.2)}
+                title="Zoom Out"
+                style={{
+                  width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
+                  fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer', color: 'var(--color-text-muted)',
+                }}
+              >
+                -
+              </button>
+              <button
+                onClick={() => zoomTo(zoom * 1.2)}
+                title="Zoom In"
+                style={{
+                  width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
+                  fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer', color: 'var(--color-text-muted)',
+                }}
+              >
+                +
+              </button>
+              <button
+                onClick={resetView}
+                title="Fit to Center"
+                style={{
+                  padding: '0 6px', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
+                  fontFamily: 'var(--font-mono)', fontSize: 10, cursor: 'pointer', color: 'var(--color-text-muted)',
+                }}
+              >
+                Fit
+              </button>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', marginLeft: 2 }}>
+                {Math.round(zoom * 100)}%
+              </span>
+            </div>
 
             {/* Right Side Tools */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -464,8 +503,8 @@ function CrossRepoGraph({
                   onClick={() => setShowRightPanel(true)}
                   style={{
                     padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                    background: 'white',
-                    color: '#111', border: '1px solid var(--color-border-bright)',
+                    background: 'var(--color-card-bg)',
+                    color: 'var(--color-text)', border: '1px solid var(--color-border-bright)',
                     borderRadius: 2, cursor: 'pointer', fontWeight: 600,
                   }}
                   title="Show priority list"
@@ -480,7 +519,7 @@ function CrossRepoGraph({
           {showScopeList && repos.length > 0 && (
             <div style={{
               display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px 10px',
-              background: '#fcfcfc', borderTop: '1px solid var(--color-border)',
+              background: 'var(--color-surface)', borderTop: '1px solid var(--color-border)',
             }}>
               {/* Search Bar & Visible Scroll Counter Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -497,8 +536,8 @@ function CrossRepoGraph({
                       fontFamily: 'var(--font-mono)',
                       border: '1px solid var(--color-border-bright)',
                       borderRadius: 2,
-                      background: 'white',
-                      color: '#111',
+                      background: 'var(--color-input-bg)',
+                      color: 'var(--color-text)',
                       outline: 'none',
                     }}
                   />
@@ -621,7 +660,7 @@ function CrossRepoGraph({
               {/* 3 Step Instructions */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 <div style={{
-                  background: '#f9fafb',
+                  background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 4,
                   padding: 12,
@@ -629,7 +668,7 @@ function CrossRepoGraph({
                   flexDirection: 'column',
                   gap: 4,
                 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)' }}>
                     1. Ingest Repositories
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
@@ -638,7 +677,7 @@ function CrossRepoGraph({
                 </div>
 
                 <div style={{
-                  background: '#f9fafb',
+                  background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 4,
                   padding: 12,
@@ -646,7 +685,7 @@ function CrossRepoGraph({
                   flexDirection: 'column',
                   gap: 4,
                 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)' }}>
                     2. Explore Architecture
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
@@ -655,7 +694,7 @@ function CrossRepoGraph({
                 </div>
 
                 <div style={{
-                  background: '#f9fafb',
+                  background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 4,
                   padding: 12,
@@ -663,7 +702,7 @@ function CrossRepoGraph({
                   flexDirection: 'column',
                   gap: 4,
                 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)' }}>
                     3. Direct AI Agent
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
@@ -694,24 +733,24 @@ function CrossRepoGraph({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      background: 'white',
+                      background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: 4,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#2563eb'
-                      e.currentTarget.style.background = '#f0f7ff'
+                      e.currentTarget.style.borderColor = 'var(--color-blue)'
+                      e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.borderColor = 'var(--color-border)'
-                      e.currentTarget.style.background = 'white'
+                      e.currentTarget.style.background = 'var(--color-surface)'
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-blue)' }}>
                           meshery
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -748,24 +787,24 @@ function CrossRepoGraph({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      background: 'white',
+                      background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: 4,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#2563eb'
-                      e.currentTarget.style.background = '#f0f7ff'
+                      e.currentTarget.style.borderColor = 'var(--color-blue)'
+                      e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.borderColor = 'var(--color-border)'
-                      e.currentTarget.style.background = 'white'
+                      e.currentTarget.style.background = 'var(--color-surface)'
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-blue)' }}>
                           kubernetes
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -802,24 +841,24 @@ function CrossRepoGraph({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      background: 'white',
+                      background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: 4,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#059669'
-                      e.currentTarget.style.background = '#f0fdf4'
+                      e.currentTarget.style.borderColor = 'var(--color-green)'
+                      e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.borderColor = 'var(--color-border)'
-                      e.currentTarget.style.background = 'white'
+                      e.currentTarget.style.background = 'var(--color-surface)'
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#047857' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-green)' }}>
                           django
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -856,24 +895,24 @@ function CrossRepoGraph({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      background: 'white',
+                      background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: 4,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#d97706'
-                      e.currentTarget.style.background = '#fffbeb'
+                      e.currentTarget.style.borderColor = 'var(--color-orange)'
+                      e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.borderColor = 'var(--color-border)'
-                      e.currentTarget.style.background = 'white'
+                      e.currentTarget.style.background = 'var(--color-surface)'
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-orange)' }}>
                           vlc (videolan)
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -995,8 +1034,8 @@ function CrossRepoGraph({
 
                 const pathData = `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`
                 const strokeColor = isHighlighted
-                  ? (isHttp ? '#dc2626' : '#111')
-                  : (isHttp ? '#ef4444' : '#a3a3a3')
+                  ? (isHttp ? '#dc2626' : 'var(--color-text)')
+                  : (isHttp ? '#ef4444' : 'var(--color-border-strong)')
 
                 return (
                   <g key={`${e.from}->${e.to}-${idx}`}>
@@ -1043,15 +1082,15 @@ function CrossRepoGraph({
               const inbound = edges.filter(e => e.to === n.id).length
               const outbound = edges.filter(e => e.from === n.id).length
 
-              let cardBg = isSelected ? '#111' : (isDimmed ? '#ffffff90' : 'white')
+              let cardBg = isSelected ? 'var(--color-text)' : 'var(--color-card-bg)'
               let borderStyle = `1px solid ${repoCol.border}`
               if (isSelected) {
-                borderStyle = '1.5px solid #111'
+                borderStyle = '1.5px solid var(--color-text)'
               } else if (isCaller) {
-                cardBg = '#fef2f2'
+                cardBg = 'rgba(220, 38, 38, 0.15)'
                 borderStyle = '1.5px solid #dc2626'
               } else if (isCallee) {
-                cardBg = '#f0fdf4'
+                cardBg = 'rgba(22, 163, 74, 0.15)'
                 borderStyle = '1.5px solid #16a34a'
               }
 
@@ -1090,8 +1129,8 @@ function CrossRepoGraph({
                     cursor: 'pointer',
                     opacity: isDimmed ? 0.3 : 1,
                     boxShadow: isSelected
-                      ? '0 4px 14px rgba(0,0,0,0.2)'
-                      : (isCaller ? '0 2px 10px rgba(220, 38, 38, 0.2)' : '0 1px 3px rgba(0,0,0,0.04)'),
+                      ? '0 4px 14px rgba(0,0,0,0.3)'
+                      : (isCaller ? '0 2px 10px rgba(220, 38, 38, 0.2)' : '0 1px 3px rgba(0,0,0,0.06)'),
                     transition: 'border 0.15s, box-shadow 0.15s, opacity 0.15s, transform 0.1s',
                     zIndex: isSelected ? 15 : (isConnected ? 10 : 2),
                   }}
@@ -1101,7 +1140,7 @@ function CrossRepoGraph({
                     width: 5,
                     height: 5,
                     borderRadius: 1,
-                    background: isSelected ? '#fff' : (isCaller ? '#dc2626' : repoCol.main),
+                    background: isSelected ? 'var(--color-bg)' : (isCaller ? '#dc2626' : repoCol.main),
                     flexShrink: 0,
                   }} />
 
@@ -1111,9 +1150,9 @@ function CrossRepoGraph({
                     fontWeight: 700,
                     padding: '1px 3px',
                     borderRadius: 2,
-                    background: isSelected ? 'rgba(255,255,255,0.2)' : badge.bg,
-                    color: isSelected ? 'white' : badge.color,
-                    border: `1px solid ${isSelected ? 'rgba(255,255,255,0.3)' : badge.color + '40'}`,
+                    background: isSelected ? 'rgba(0,0,0,0.15)' : badge.bg,
+                    color: isSelected ? 'var(--color-bg)' : badge.color,
+                    border: `1px solid ${isSelected ? 'rgba(0,0,0,0.2)' : badge.color + '40'}`,
                     flexShrink: 0,
                   }}>
                     {badge.label}
@@ -1123,7 +1162,7 @@ function CrossRepoGraph({
                     fontFamily: 'var(--font-mono)',
                     fontSize: 10,
                     fontWeight: isSelected ? 600 : 500,
-                    color: isSelected ? 'white' : (isCaller ? '#991b1b' : '#111'),
+                    color: isSelected ? 'var(--color-bg)' : (isCaller ? '#ef4444' : 'var(--color-text)'),
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -1262,7 +1301,7 @@ function CrossRepoGraph({
         <div style={{
           display: 'flex', gap: 14, padding: '5px 12px',
           borderTop: '1px solid var(--color-border)', flexShrink: 0, alignItems: 'center',
-          background: 'white',
+          background: 'var(--color-header-bg)',
         }}>
           {nodes.length > 0 ? (
             <>
@@ -1295,7 +1334,7 @@ function CrossRepoGraph({
         <div style={{
           width: 290,
           borderLeft: '1px solid var(--color-border)',
-          background: 'white',
+          background: 'var(--color-card-bg)',
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
@@ -1315,7 +1354,7 @@ function CrossRepoGraph({
               title="Hide priority list"
               aria-label="Hide priority list"
               style={{
-                background: 'white',
+                background: 'var(--color-card-bg)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 3,
                 width: 24,
@@ -1331,12 +1370,12 @@ function CrossRepoGraph({
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#dc2626'
                 e.currentTarget.style.color = '#dc2626'
-                e.currentTarget.style.background = '#fef2f2'
+                e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'var(--color-border)'
                 e.currentTarget.style.color = 'var(--color-text-muted)'
-                e.currentTarget.style.background = 'white'
+                e.currentTarget.style.background = 'var(--color-card-bg)'
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1348,7 +1387,7 @@ function CrossRepoGraph({
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 2 }}>
                 RELATION PRIORITY MATRIX
               </div>
-              <div style={{ fontSize: 11, color: '#111', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 11, color: 'var(--color-text)', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Ranked by Multi-Repo Dependencies
               </div>
             </div>
@@ -1374,8 +1413,8 @@ function CrossRepoGraph({
                   style={{
                     padding: '8px 4px',
                     border: 'none',
-                    background: active ? 'white' : 'transparent',
-                    borderBottom: active ? '2px solid #111' : '2px solid transparent',
+                    background: active ? 'var(--color-card-bg)' : 'transparent',
+                    borderBottom: active ? '2px solid var(--color-text)' : '2px solid transparent',
                     cursor: 'pointer',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1387,7 +1426,7 @@ function CrossRepoGraph({
                     fontSize: 9,
                     fontFamily: 'var(--font-mono)',
                     fontWeight: 700,
-                    color: active ? '#111' : 'var(--color-text-muted)',
+                    color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
                   }}>
                     {tab.label}
                   </span>
@@ -1396,8 +1435,8 @@ function CrossRepoGraph({
                     fontFamily: 'var(--font-mono)',
                     padding: '0 4px',
                     borderRadius: 2,
-                    background: active ? tab.badge.bg : '#e5e7eb',
-                    color: active ? tab.badge.color : '#6b7280',
+                    background: active ? tab.badge.bg : 'var(--color-surface)',
+                    color: active ? tab.badge.color : 'var(--color-text-dim)',
                     fontWeight: 600,
                   }}>
                     {tab.count}
@@ -1422,7 +1461,8 @@ function CrossRepoGraph({
                 border: '1px solid var(--color-border)',
                 borderRadius: 2,
                 outline: 'none',
-                background: 'var(--color-surface)',
+                background: 'var(--color-input-bg)',
+                color: 'var(--color-text)',
               }}
             />
           </div>
@@ -1430,8 +1470,8 @@ function CrossRepoGraph({
           {/* Priority List Items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {activePriorityList.length === 0 && (
-              <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                No symbols found
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', textAlign: 'center', padding: '20px 0' }}>
+                No matching symbols found
               </div>
             )}
             {activePriorityList.map((item, idx) => {
@@ -1444,9 +1484,9 @@ function CrossRepoGraph({
                   onClick={() => focusNode(item)}
                   style={{
                     padding: '8px 10px',
-                    background: isSelected ? '#111' : 'white',
-                    color: isSelected ? 'white' : '#111',
-                    border: isSelected ? '1px solid #111' : '1px solid var(--color-border)',
+                    background: isSelected ? 'var(--color-text)' : 'var(--color-card-bg)',
+                    color: isSelected ? 'var(--color-bg)' : 'var(--color-text)',
+                    border: isSelected ? '1px solid var(--color-text)' : '1px solid var(--color-border)',
                     borderRadius: 3,
                     cursor: 'pointer',
                     transition: 'background 0.15s, border 0.15s',
@@ -1459,7 +1499,7 @@ function CrossRepoGraph({
                         fontSize: 9,
                         fontFamily: 'var(--font-mono)',
                         fontWeight: 700,
-                        color: isSelected ? '#9ca3af' : 'var(--color-text-dim)',
+                        color: isSelected ? 'var(--color-bg)' : 'var(--color-text-dim)',
                       }}>
                         #{idx + 1}
                       </span>
@@ -1467,7 +1507,7 @@ function CrossRepoGraph({
                         fontFamily: 'var(--font-mono)',
                         fontSize: 11,
                         fontWeight: 600,
-                        color: isSelected ? 'white' : '#111',
+                        color: isSelected ? 'var(--color-bg)' : 'var(--color-text)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -1482,9 +1522,9 @@ function CrossRepoGraph({
                       fontWeight: 700,
                       padding: '1px 5px',
                       borderRadius: 2,
-                      background: isSelected ? 'rgba(255,255,255,0.2)' : (item.totalRelations > 2 ? '#fef2f2' : '#f3f4f6'),
-                      color: isSelected ? 'white' : (item.totalRelations > 2 ? '#dc2626' : '#4b5563'),
-                      border: isSelected ? '1px solid rgba(255,255,255,0.3)' : `1px solid ${item.totalRelations > 2 ? '#fca5a5' : '#e5e7eb'}`,
+                      background: isSelected ? 'rgba(0,0,0,0.15)' : (item.totalRelations > 2 ? 'rgba(239, 68, 68, 0.12)' : 'var(--color-surface)'),
+                      color: isSelected ? 'var(--color-bg)' : (item.totalRelations > 2 ? '#ef4444' : 'var(--color-text-muted)'),
+                      border: isSelected ? '1px solid rgba(0,0,0,0.2)' : `1px solid ${item.totalRelations > 2 ? 'rgba(239, 68, 68, 0.3)' : 'var(--color-border)'}`,
                       flexShrink: 0,
                     }}>
                       {item.totalRelations} links
@@ -1493,13 +1533,13 @@ function CrossRepoGraph({
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 9, fontFamily: 'var(--font-mono)' }}>
                     <span style={{
-                      color: isSelected ? '#d1d5db' : repoCol.main,
+                      color: isSelected ? 'var(--color-bg)' : repoCol.main,
                       fontWeight: 500,
                     }}>
                       {item.repo.replace('repo_', '')}
                     </span>
 
-                    <div style={{ display: 'flex', gap: 6, color: isSelected ? '#9ca3af' : 'var(--color-text-dim)' }}>
+                    <div style={{ display: 'flex', gap: 6, color: isSelected ? 'var(--color-bg)' : 'var(--color-text-dim)' }}>
                       <span>^{item.inbound} callers</span>
                       <span>v{item.outbound} deps</span>
                     </div>
@@ -1840,7 +1880,7 @@ function AgentPanel({
               }}>
                 {KIND_BADGES[activeNode.kind]?.label || activeNode.kind.toUpperCase()}
               </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#111' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-text)' }}>
                 {activeNode.label}
               </span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)' }}>
@@ -1874,7 +1914,7 @@ function AgentPanel({
               onClick={() => runAgentWithDirective(`Deprecate ${activeNode.label} in ${activeNode.repo} and migrate all cross-repository callers to the latest version`)}
               style={{
                 padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: '#111', color: 'white', border: '1px solid #111',
+                background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: '1px solid var(--color-btn-primary-bg)',
                 borderRadius: 2, cursor: 'pointer', fontWeight: 600,
               }}
             >
@@ -1884,7 +1924,7 @@ function AgentPanel({
               onClick={() => runAgentWithDirective(`Analyze blast radius and downstream consumers for ${activeNode.kind} ${activeNode.label} across all repositories`)}
               style={{
                 padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: 'white', color: '#111', border: '1px solid var(--color-border-bright)',
+                background: 'var(--color-card-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border-bright)',
                 borderRadius: 2, cursor: 'pointer', fontWeight: 500,
               }}
             >
@@ -1894,7 +1934,7 @@ function AgentPanel({
               onClick={() => runAgentWithDirective(`Synthesize multi-repository contract patch and dynamic diff for ${activeNode.label}`)}
               style={{
                 padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: 'white', color: '#111', border: '1px solid var(--color-border-bright)',
+                background: 'var(--color-card-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border-bright)',
                 borderRadius: 2, cursor: 'pointer', fontWeight: 500,
               }}
             >
@@ -1921,8 +1961,9 @@ function AgentPanel({
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{
-                background: '#111', color: 'white',
+                background: 'var(--color-surface-2)', color: 'var(--color-text)',
                 fontFamily: 'var(--font-mono)', fontSize: 10, padding: '1px 6px', borderRadius: 2,
+                border: '1px solid var(--color-border-bright)',
               }}>
                 {s.tool}
               </span>
@@ -1936,7 +1977,7 @@ function AgentPanel({
             <div style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, marginBottom: 2 }}>
               &gt; {s.input}
             </div>
-            <div style={{ color: '#111', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            <div style={{ color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
               {s.output}
             </div>
           </div>
@@ -1960,14 +2001,14 @@ function AgentPanel({
               SYNTHESIZED PLAN ({totalTokens} tokens)
             </span>
           </div>
-          <div style={{ color: '#111', fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{response}</div>
+          <div style={{ color: 'var(--color-text)', fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{response}</div>
         </div>
       )}
 
       {/* Command Input Bar */}
       <div style={{
         padding: '10px 14px', borderTop: '1px solid var(--color-border)',
-        background: 'white', flexShrink: 0,
+        background: 'var(--color-card-bg)', flexShrink: 0,
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -1983,7 +2024,7 @@ function AgentPanel({
             placeholder="Enter agent task directive..."
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              color: '#111', fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontSize: 11,
             }}
           />
           <button
@@ -1991,9 +2032,9 @@ function AgentPanel({
             disabled={running}
             style={{
               padding: '4px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
-              background: running ? 'var(--color-surface-2)' : '#111',
-              color: running ? 'var(--color-text-muted)' : 'white',
-              border: `1px solid ${running ? 'var(--color-border)' : '#111'}`,
+              background: running ? 'var(--color-surface-2)' : 'var(--color-btn-primary-bg)',
+              color: running ? 'var(--color-text-muted)' : 'var(--color-btn-primary-text)',
+              border: `1px solid ${running ? 'var(--color-border)' : 'var(--color-btn-primary-bg)'}`,
               borderRadius: 2, cursor: running ? 'not-allowed' : 'pointer', fontWeight: 600,
               flexShrink: 0,
             }}
@@ -2229,9 +2270,9 @@ function BenchmarksView({
                 fontSize: 11,
                 fontFamily: 'var(--font-mono)',
                 fontWeight: 600,
-                background: '#f0f7ff',
-                color: '#1d4ed8',
-                border: '1px solid #bfdbfe',
+                background: 'var(--color-blue-dim)',
+                color: 'var(--color-blue)',
+                border: '1px solid var(--color-border-bright)',
                 borderRadius: 3,
                 cursor: 'pointer',
               }}
@@ -2250,7 +2291,7 @@ function BenchmarksView({
             width: '100%',
             textAlign: 'left',
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#111', marginBottom: 6 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--color-text)', marginBottom: 6 }}>
               RECOMMENDED ORGANIZATIONS:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -2273,16 +2314,16 @@ function BenchmarksView({
           { label: 'SYMBOLS EVALUATED', value: String(symbolsCount), sub: 'AST Nodes Mapped', note: 'Strict Tree-sitter & SCIP boundary' },
         ].map(s => (
           <div key={s.label} style={{
-            background: 'white', border: '1px solid var(--color-border)',
+            background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
             borderRadius: 3, padding: '14px 16px', display: 'flex', flexDirection: 'column',
           }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 4 }}>
               {s.label}
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#111', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-mono)' }}>
               {s.value}
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-green)', fontWeight: 600, marginTop: 2 }}>
               {s.sub}
             </div>
             <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 4 }}>
@@ -2295,7 +2336,7 @@ function BenchmarksView({
       {/* Interactive Suite Tabs */}
       <div style={{
         display: 'flex', gap: 6, borderBottom: '1px solid var(--color-border)',
-        background: 'white', padding: '0 4px',
+        background: 'var(--color-card-bg)', padding: '0 4px',
       }}>
         {[
           { id: 'matrix', label: 'Comparative Matrix' },
@@ -2311,8 +2352,8 @@ function BenchmarksView({
               style={{
                 padding: '8px 14px', border: 'none', background: 'transparent',
                 fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-                borderBottom: active ? '2px solid #111' : '2px solid transparent',
-                color: active ? '#111' : 'var(--color-text-muted)',
+                borderBottom: active ? '2px solid var(--color-text)' : '2px solid transparent',
+                color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
                 fontWeight: active ? 700 : 400,
               }}
             >
@@ -2325,7 +2366,7 @@ function BenchmarksView({
       {/* Tab 1: Comparative Matrix */}
       {activeTab === 'matrix' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ border: '1px solid var(--color-border)', borderRadius: 3, overflow: 'hidden', background: 'white' }}>
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: 3, overflow: 'hidden', background: 'var(--color-card-bg)' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
               padding: '10px 16px', background: 'var(--color-surface)',
@@ -2354,14 +2395,14 @@ function BenchmarksView({
                     display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
                     padding: '11px 16px',
                     borderBottom: i < 5 ? '1px solid var(--color-border)' : 'none',
-                    background: i % 2 === 0 ? 'white' : 'var(--color-surface)',
+                    background: i % 2 === 0 ? 'var(--color-card-bg)' : 'var(--color-surface)',
                     fontFamily: 'var(--font-mono)', fontSize: 11, alignItems: 'center',
                   }}
                 >
-                  <span style={{ color: '#111', fontWeight: 600 }}>{row.metric}</span>
-                  <span style={{ color: '#dc2626' }}>{row.rag}</span>
-                  <span style={{ color: '#16a34a', fontWeight: 700 }}>{crossVal}</span>
-                  <span style={{ color: '#111', fontWeight: 600 }}>{row.delta}</span>
+                  <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{row.metric}</span>
+                  <span style={{ color: 'var(--color-red)' }}>{row.rag}</span>
+                  <span style={{ color: 'var(--color-green)', fontWeight: 700 }}>{crossVal}</span>
+                  <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{row.delta}</span>
                 </div>
               )
             })}
@@ -2371,7 +2412,7 @@ function BenchmarksView({
             background: 'var(--color-surface)', border: '1px solid var(--color-border)',
             borderRadius: 3, padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
           }}>
-            <div style={{ fontWeight: 700, color: '#111', marginBottom: 4 }}>Why Standard Vector RAG Fails in Cross-Repository Codebases:</div>
+            <div style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>Why Standard Vector RAG Fails in Cross-Repository Codebases:</div>
             <p style={{ color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
               Standard embedding vectors chunk files arbitrarily without AST grammar boundaries. When an API endpoint changes in a backend repo, text similarity search cannot trace consumer callers across separate repositories. CrossContext solves this by maintaining a persistent SCIP call graph with Tree-sitter exact slice extraction.
             </p>
@@ -2383,11 +2424,11 @@ function BenchmarksView({
       {activeTab === 'repoqa' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{
-            background: 'white', border: '1px solid var(--color-border)',
+            background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
             borderRadius: 3, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#111' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-text)' }}>
                 RepoQA: Needle-in-a-Haystack Function Precision
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
@@ -2395,7 +2436,7 @@ function BenchmarksView({
               </div>
             </div>
             <span style={{
-              background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0',
+              background: 'var(--color-green-dim)', color: 'var(--color-green)', border: '1px solid var(--color-green-dim)',
               padding: '2px 8px', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
             }}>
               PASSED ({liveBench?.repoqa?.score !== undefined ? `${Math.round(liveBench.repoqa.score * 100)}% SCORE` : '100% SCORE'})
@@ -2406,19 +2447,19 @@ function BenchmarksView({
             {liveBench?.repoqa?.details && liveBench.repoqa.details.length > 0 ? (
               liveBench.repoqa.details.map((det: string, idx: number) => (
                 <div key={idx} style={{
-                  background: 'white', border: '1px solid var(--color-border)',
+                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
                   borderRadius: 3, padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, color: '#111' }}>Test Case #{idx + 1}</span>
-                    <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 10 }}>Exact AST Match</span>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>Test Case #{idx + 1}</span>
+                    <span style={{ color: 'var(--color-green)', fontWeight: 600, fontSize: 10 }}>Exact AST Match</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{det}</div>
                 </div>
               ))
             ) : (
               <div style={{
-                background: 'white', border: '1px solid var(--color-border)',
+                background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
                 borderRadius: 3, padding: '24px 16px', textAlign: 'center',
                 fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)'
               }}>
@@ -2433,11 +2474,11 @@ function BenchmarksView({
       {activeTab === 'codescale' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{
-            background: 'white', border: '1px solid var(--color-border)',
+            background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
             borderRadius: 3, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#111' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-text)' }}>
                 CodeScaleBench: Multi-Repository Deprecation Blast Radius
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
@@ -2445,7 +2486,7 @@ function BenchmarksView({
               </div>
             </div>
             <span style={{
-              background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0',
+              background: 'var(--color-green-dim)', color: 'var(--color-green)', border: '1px solid var(--color-green-dim)',
               padding: '2px 8px', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
             }}>
               {liveBench?.codescale?.passed ? 'PASSED (100% RECALL)' : 'PASSED (ACTIVE)'}
@@ -2456,20 +2497,20 @@ function BenchmarksView({
             {liveBench?.codescale?.details && liveBench.codescale.details.length > 0 ? (
               liveBench.codescale.details.map((det: string, idx: number) => (
                 <div key={idx} style={{
-                  background: 'white', border: '1px solid var(--color-border)',
+                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
                   borderRadius: 3, padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
                 }}>
-                  <div style={{ fontWeight: 700, color: '#111', marginBottom: 4 }}>Scenario #{idx + 1}</div>
-                  <div style={{ fontSize: 11, color: '#111' }}>{det}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>Scenario #{idx + 1}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text)' }}>{det}</div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 10, marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--color-border)' }}>
-                    <div>CrossContext AST: <span style={{ color: '#16a34a', fontWeight: 600 }}>Deterministic Graph Traversal</span></div>
-                    <div>Naive Text RAG: <span style={{ color: '#dc2626' }}>0 callers detected (Missed multi-repo link)</span></div>
+                    <div>CrossContext AST: <span style={{ color: 'var(--color-green)', fontWeight: 600 }}>Deterministic Graph Traversal</span></div>
+                    <div>Naive Text RAG: <span style={{ color: 'var(--color-red)' }}>0 callers detected (Missed multi-repo link)</span></div>
                   </div>
                 </div>
               ))
             ) : (
               <div style={{
-                background: 'white', border: '1px solid var(--color-border)',
+                background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
                 borderRadius: 3, padding: '24px 16px', textAlign: 'center',
                 fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)'
               }}>
@@ -2484,10 +2525,10 @@ function BenchmarksView({
       {activeTab === 'simulator' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{
-            background: 'white', border: '1px solid var(--color-border)',
+            background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
             borderRadius: 3, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12,
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)' }}>
               Interactive Comparison Simulator
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -2497,6 +2538,7 @@ function BenchmarksView({
                 placeholder="Enter refactoring or deprecation scenario..."
                 style={{
                   flex: 1, padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: 'var(--color-input-bg)', color: 'var(--color-text)',
                   border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none',
                 }}
               />
@@ -2504,7 +2546,7 @@ function BenchmarksView({
                 onClick={runSimulation}
                 disabled={simRunning}
                 style={{
-                  padding: '6px 16px', background: '#111', color: 'white',
+                  padding: '6px 16px', background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)',
                   border: 'none', borderRadius: 2, cursor: simRunning ? 'not-allowed' : 'pointer',
                   fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
                 }}
@@ -2529,7 +2571,7 @@ function BenchmarksView({
                   style={{
                     padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
                     background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                    borderRadius: 2, cursor: 'pointer', color: '#111',
+                    borderRadius: 2, cursor: 'pointer', color: 'var(--color-text)',
                   }}
                 >
                   {preset}
@@ -2542,37 +2584,37 @@ function BenchmarksView({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               {/* AST Column */}
               <div style={{
-                background: 'white', border: '1px solid #16a34a',
+                background: 'var(--color-card-bg)', border: '1px solid rgba(22, 163, 74, 0.4)',
                 borderRadius: 3, padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
               }}>
-                <div style={{ color: '#16a34a', fontWeight: 700, marginBottom: 8, fontSize: 12 }}>
+                <div style={{ color: 'var(--color-green)', fontWeight: 700, marginBottom: 8, fontSize: 12 }}>
                   CrossContext AST Engine (Deterministic)
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10 }}>
-                  <div>Context Tokens: <strong style={{ color: '#16a34a' }}>{simResult.ast.tokens} tokens</strong></div>
+                  <div>Context Tokens: <strong style={{ color: 'var(--color-green)' }}>{simResult.ast.tokens} tokens</strong></div>
                   <div>Retrieval Latency: <strong>{simResult.ast.latencyMs} ms</strong></div>
                   <div>Multi-Hop Graph Hops: <strong>{simResult.ast.hops} hops</strong></div>
                   <div>Repositories Covered: <strong>{simResult.ast.reposCovered.join(', ')}</strong></div>
-                  <div>Downstream Breakages Identified: <strong style={{ color: '#16a34a' }}>{simResult.ast.breakagesFound}</strong></div>
-                  <div>Recall Accuracy: <strong style={{ color: '#16a34a' }}>{simResult.ast.accuracy}</strong></div>
+                  <div>Downstream Breakages Identified: <strong style={{ color: 'var(--color-green)' }}>{simResult.ast.breakagesFound}</strong></div>
+                  <div>Recall Accuracy: <strong style={{ color: 'var(--color-green)' }}>{simResult.ast.accuracy}</strong></div>
                 </div>
               </div>
 
               {/* Naive RAG Column */}
               <div style={{
-                background: 'white', border: '1px solid #dc2626',
+                background: 'var(--color-card-bg)', border: '1px solid rgba(220, 38, 38, 0.4)',
                 borderRadius: 3, padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
               }}>
-                <div style={{ color: '#dc2626', fontWeight: 700, marginBottom: 8, fontSize: 12 }}>
+                <div style={{ color: 'var(--color-red)', fontWeight: 700, marginBottom: 8, fontSize: 12 }}>
                   Naive Text RAG (Vector Similarity)
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10 }}>
-                  <div>Context Tokens: <strong style={{ color: '#dc2626' }}>{simResult.rag.tokens} tokens</strong></div>
+                  <div>Context Tokens: <strong style={{ color: 'var(--color-red)' }}>{simResult.rag.tokens} tokens</strong></div>
                   <div>Retrieval Latency: <strong>{simResult.rag.latencyMs} ms</strong></div>
                   <div>Multi-Hop Graph Hops: <strong>{simResult.rag.hops} hops (Unsupported)</strong></div>
                   <div>Repositories Covered: <strong>{simResult.rag.reposCovered.join(', ')}</strong></div>
-                  <div>Downstream Breakages Identified: <strong style={{ color: '#dc2626' }}>{simResult.rag.breakagesFound}</strong></div>
-                  <div>Recall Accuracy: <strong style={{ color: '#dc2626' }}>{simResult.rag.accuracy}</strong></div>
+                  <div>Downstream Breakages Identified: <strong style={{ color: 'var(--color-red)' }}>{simResult.rag.breakagesFound}</strong></div>
+                  <div>Recall Accuracy: <strong style={{ color: 'var(--color-red)' }}>{simResult.rag.accuracy}</strong></div>
                 </div>
               </div>
             </div>
@@ -2687,7 +2729,7 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
       {/* Title & Actions Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: '#111', margin: '0 0 4px' }}>
+          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}>
             Federated Organization Architecture Blueprint
           </h2>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
@@ -2699,8 +2741,8 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
             onClick={handleCopy}
             style={{
               padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: 'white', border: '1px solid var(--color-border-bright)',
-              color: '#111', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+              background: 'var(--color-card-bg)', border: '1px solid var(--color-border-bright)',
+              color: 'var(--color-text)', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
             {copied ? 'Copied' : 'Copy Prompt'}
@@ -2709,7 +2751,7 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
             onClick={handleDownload}
             style={{
               padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: '#111', border: 'none', color: 'white',
+              background: 'var(--color-btn-primary-bg)', border: 'none', color: 'var(--color-btn-primary-text)',
               borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
@@ -2719,10 +2761,10 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
       </div>
 
       {/* Interactive Repository Selection & Correlation Filter */}
-      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '16px 18px' }}>
+      <div style={{ background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '16px 18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)', letterSpacing: 0.5 }}>
               SELECT REPOSITORIES FOR CORRELATION & CONTEXT SCOPE
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', marginTop: 2 }}>
@@ -2734,8 +2776,8 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
               onClick={handleSelectAll}
               style={{
                 padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                background: selectedRepos.length === availableRepos.length ? '#111' : 'white',
-                color: selectedRepos.length === availableRepos.length ? 'white' : '#111',
+                background: selectedRepos.length === availableRepos.length ? 'var(--color-btn-primary-bg)' : 'var(--color-card-bg)',
+                color: selectedRepos.length === availableRepos.length ? 'var(--color-btn-primary-text)' : 'var(--color-text)',
                 border: '1px solid var(--color-border-bright)', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
               }}
             >
@@ -2745,7 +2787,7 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
               onClick={handleClearAll}
               style={{
                 padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                background: 'white', color: 'var(--color-text-muted)',
+                background: 'var(--color-card-bg)', color: 'var(--color-text-muted)',
                 border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
               }}
             >
@@ -2769,9 +2811,9 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '6px 12px',
-                  background: isSelected ? '#111' : 'var(--color-surface)',
-                  color: isSelected ? 'white' : '#111',
-                  border: isSelected ? '1px solid #111' : '1px solid var(--color-border)',
+                  background: isSelected ? 'var(--color-btn-primary-bg)' : 'var(--color-surface)',
+                  color: isSelected ? 'var(--color-btn-primary-text)' : 'var(--color-text)',
+                  border: isSelected ? '1px solid var(--color-btn-primary-bg)' : '1px solid var(--color-border)',
                   borderRadius: 3, cursor: 'pointer',
                   fontFamily: 'var(--font-mono)', fontSize: 11,
                   transition: 'all 0.15s ease',
@@ -2780,23 +2822,24 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
                 <span style={{
                   width: 14, height: 14, borderRadius: 2,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  border: isSelected ? '1px solid white' : '1px solid var(--color-border-bright)',
-                  background: isSelected ? 'white' : 'transparent',
-                  color: '#111', fontSize: 10, fontWeight: 700,
+                  border: isSelected ? '1px solid var(--color-btn-primary-text)' : '1px solid var(--color-border-bright)',
+                  background: isSelected ? 'var(--color-btn-primary-text)' : 'transparent',
+                  color: 'var(--color-btn-primary-bg)', fontSize: 10, fontWeight: 700,
                 }}>
                   {isSelected ? '✓' : ''}
                 </span>
                 <span style={{ fontWeight: isSelected ? 700 : 500 }}>{repoName}</span>
                 <span style={{
                   fontSize: 9, padding: '1px 5px', borderRadius: 2,
-                  background: isSelected ? 'rgba(255,255,255,0.2)' : 'var(--color-surface-2)',
-                  color: isSelected ? 'white' : 'var(--color-text-muted)',
+                  background: isSelected ? 'rgba(128,128,128,0.2)' : 'var(--color-surface-2)',
+                  color: isSelected ? 'var(--color-btn-primary-text)' : 'var(--color-text-muted)',
                 }}>
                   {lang}
                 </span>
                 {typeof symbolCount === 'number' && (
                   <span style={{
-                    fontSize: 9, color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--color-text-dim)',
+                    fontSize: 9, color: isSelected ? 'var(--color-btn-primary-text)' : 'var(--color-text-dim)',
+                    opacity: 0.8,
                   }}>
                     {symbolCount} syms
                   </span>
@@ -2823,9 +2866,9 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
                     onClick={() => handleSelectPair(rA, rB)}
                     style={{
                       padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                      background: isPairActive ? '#e0e7ff' : 'var(--color-surface-2)',
-                      color: isPairActive ? '#3730a3' : '#111',
-                      border: isPairActive ? '1px solid #c7d2fe' : '1px solid var(--color-border)',
+                      background: isPairActive ? 'var(--color-blue-dim)' : 'var(--color-surface-2)',
+                      color: isPairActive ? 'var(--color-blue)' : 'var(--color-text)',
+                      border: isPairActive ? '1px solid var(--color-blue)' : '1px solid var(--color-border)',
                       borderRadius: 2, cursor: 'pointer',
                     }}
                   >
@@ -2840,10 +2883,10 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
         {/* Scope Status Banner */}
         <div style={{
           marginTop: 12, padding: '8px 12px', borderRadius: 2,
-          background: selectedRepos.length >= 2 ? '#f0fdf4' : selectedRepos.length === 1 ? '#fffbeb' : '#fef2f2',
-          border: `1px solid ${selectedRepos.length >= 2 ? '#bbf7d0' : selectedRepos.length === 1 ? '#fde68a' : '#fecaca'}`,
+          background: selectedRepos.length >= 2 ? 'var(--color-green-dim)' : selectedRepos.length === 1 ? 'rgba(234, 88, 12, 0.1)' : 'rgba(220, 38, 38, 0.1)',
+          border: `1px solid ${selectedRepos.length >= 2 ? 'rgba(22, 163, 74, 0.3)' : selectedRepos.length === 1 ? 'rgba(234, 88, 12, 0.3)' : 'rgba(220, 38, 38, 0.3)'}`,
           fontFamily: 'var(--font-mono)', fontSize: 11,
-          color: selectedRepos.length >= 2 ? '#166534' : selectedRepos.length === 1 ? '#92400e' : '#991b1b',
+          color: selectedRepos.length >= 2 ? 'var(--color-green)' : selectedRepos.length === 1 ? 'var(--color-orange)' : 'var(--color-red)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <div>
@@ -2868,8 +2911,8 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
       </div>
 
       {selectedRepos.length === 0 ? (
-        <div style={{ padding: 48, textAlign: 'center', background: 'white', border: '1px solid var(--color-border)', borderRadius: 4 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 4 }}>
+        <div style={{ padding: 48, textAlign: 'center', background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
             No Repositories Selected
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 14 }}>
@@ -2879,7 +2922,7 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
             onClick={handleSelectAll}
             style={{
               padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+              background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
             Select All Repositories
@@ -2895,21 +2938,21 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
               { label: 'DETERMINISTIC SYMBOLS', value: analysis.total_symbols },
               { label: 'CROSS-REPO API CONTRACTS', value: analysis.cross_repo_contracts_count },
             ].map(kpi => (
-              <div key={kpi.label} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '14px 16px' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: '#111' }}>{kpi.value}</div>
+              <div key={kpi.label} style={{ background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '14px 16px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--color-text)' }}>{kpi.value}</div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 4 }}>{kpi.label}</div>
               </div>
             ))}
           </div>
 
           {/* Cross-Repo API Contract Matrix Table */}
-          <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)', letterSpacing: 0.5 }}>
                 INTER-REPOSITORY API CONTRACT MATRIX ({analysis.cross_repo_contracts_count} DETECTED)
               </span>
               {isFiltered && (
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#2563eb', fontWeight: 600 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-blue)', fontWeight: 600 }}>
                   Scoped to: {selectedRepos.join(', ')}
                 </span>
               )}
@@ -2933,26 +2976,26 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
                     style={{
                       display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
                       padding: '10px 16px', borderBottom: i < analysis.cross_repo_contracts.length - 1 ? '1px solid var(--color-border)' : 'none',
-                      fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', alignItems: 'center',
+                      fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text)', alignItems: 'center',
                     }}
                   >
                     <span>{c.caller_file} : <b>{c.caller_symbol}</b></span>
                     <span style={{
-                      padding: '2px 6px', background: '#eff6ff', color: '#1e40af',
+                      padding: '2px 6px', background: 'var(--color-blue-dim)', color: 'var(--color-blue)',
                       borderRadius: 2, fontSize: 10, fontWeight: 600, width: 'fit-content',
                     }}>
                       {c.caller_repo}
                     </span>
-                    <span style={{ color: '#ea580c', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--color-orange)', fontWeight: 600 }}>
                       {c.edge_type}{c.route ? ` [${c.http_method} ${c.route}]` : ''}
                     </span>
                     <span style={{
-                      padding: '2px 6px', background: '#f0fdf4', color: '#166534',
+                      padding: '2px 6px', background: 'var(--color-green-dim)', color: 'var(--color-green)',
                       borderRadius: 2, fontSize: 10, fontWeight: 600, width: 'fit-content',
                     }}>
                       {c.callee_repo}
                     </span>
-                    <span style={{ color: '#16a34a', fontWeight: 700 }}>`{c.callee_symbol}`</span>
+                    <span style={{ color: 'var(--color-green)', fontWeight: 700 }}>`{c.callee_symbol}`</span>
                   </div>
                 ))}
               </div>
@@ -2966,12 +3009,12 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
           </div>
 
           {/* Raw AI Context Preview */}
-          <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)', letterSpacing: 0.5 }}>
                 RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS {isFiltered ? '• TARGETED REPO SCOPE' : '• FULL ORG'})
               </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#16a34a', fontWeight: 600 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-green)', fontWeight: 600 }}>
                 READY FOR CURSOR / WINDSURF / CLAUDE CODE
               </span>
             </div>
@@ -3067,7 +3110,7 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
       {/* File Tree Sidebar */}
       <div style={{
         borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column',
-        height: '100%', minHeight: 0, overflow: 'hidden', background: 'white',
+        height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--color-card-bg)',
       }}>
         {/* Repo Selector Header */}
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)', flexShrink: 0, background: 'var(--color-surface)' }}>
@@ -3082,7 +3125,7 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
             }}
             style={{
               width: '100%', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              border: '1px solid var(--color-border-bright)', borderRadius: 2, background: 'white', color: '#111',
+              border: '1px solid var(--color-border-bright)', borderRadius: 2, background: 'var(--color-input-bg)', color: 'var(--color-text)',
               outline: 'none',
             }}
           >
@@ -3098,7 +3141,7 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
             placeholder={`Filter ${fileList.length} files...`}
             style={{
               width: '100%', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
-              border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none', background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none', background: 'var(--color-input-bg)', color: 'var(--color-text)',
             }}
           />
         </div>
@@ -3127,12 +3170,12 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
                   style={{
                     padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
                     background: isSelected ? 'var(--color-surface-2)' : 'transparent',
-                    borderLeft: isSelected ? '2px solid #111' : '2px solid transparent',
+                    borderLeft: isSelected ? '2px solid var(--color-text)' : '2px solid transparent',
                     display: 'flex', flexDirection: 'column', gap: 1,
                     transition: 'background 0.1s ease',
                   }}
                 >
-                  <span style={{ fontWeight: isSelected ? 700 : 500, color: isSelected ? '#111' : 'var(--color-text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--color-text)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {fileName}
                   </span>
                   {dirPath && (
@@ -3436,21 +3479,21 @@ function IngestModal({
 
   return (
     <>
-      <div onClick={handleCloseModal} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
+      <div onClick={handleCloseModal} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 60 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: ingestSummary ? 560 : 580, background: 'white', border: '1px solid var(--color-border)',
-        borderRadius: 4, zIndex: 70, boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+        width: ingestSummary ? 560 : 580, background: 'var(--color-card-bg)', border: '1px solid var(--color-border)',
+        borderRadius: 4, zIndex: 70, boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
         display: 'flex', flexDirection: 'column', maxHeight: '90vh',
       }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>
             {ingestSummary ? 'Codebase Ingestion & Indexing Summary' : 'Ingest Dynamic GitHub Codebase'}
           </span>
           <button
             onClick={handleCloseModal}
             disabled={isBusy}
-            style={{ background: 'none', border: 'none', fontSize: 13, cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : '#111' }}
+            style={{ background: 'none', border: 'none', fontSize: 13, cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : 'var(--color-text)' }}
           >
             ✕
           </button>
@@ -3460,8 +3503,8 @@ function IngestModal({
           /* Ingestion Summary Report View */
           <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
             <div style={{
-              padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0',
-              borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 11, color: '#166534',
+              padding: '10px 14px', background: 'var(--color-green-dim)', border: '1px solid rgba(22, 163, 74, 0.3)',
+              borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-green)',
             }}>
               Successfully ingested all <b>{ingestSummary.repositories.length}</b> repositories from {ingestSummary.org}.
             </div>
@@ -3475,7 +3518,7 @@ function IngestModal({
                 { label: 'INTERNAL EDGES', value: ingestSummary.internal_edges },
               ].map(k => (
                 <div key={k.label} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '8px 10px', borderRadius: 2 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: '#111' }}>{k.value}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{k.value}</div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 2 }}>{k.label}</div>
                 </div>
               ))}
@@ -3483,7 +3526,7 @@ function IngestModal({
 
             {/* Ingested Repositories List */}
             <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, letterSpacing: 0.5, marginBottom: 6 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 6 }}>
                 INGESTED REPOSITORIES ({ingestSummary.repositories.length})
               </div>
               <div style={{
@@ -3496,13 +3539,13 @@ function IngestModal({
                     style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '6px 12px', borderBottom: i < ingestSummary.repositories.length - 1 ? '1px solid var(--color-border)' : 'none',
-                      fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111',
+                      fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text)',
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>{repo}</span>
                     <span style={{
-                      fontSize: 9, padding: '1px 6px', background: '#dcfce7',
-                      color: '#15803d', borderRadius: 2, fontWeight: 600,
+                      fontSize: 9, padding: '1px 6px', background: 'var(--color-green-dim)',
+                      color: 'var(--color-green)', borderRadius: 2, fontWeight: 600,
                     }}>
                       Indexed AST & Symbols
                     </span>
@@ -3512,7 +3555,7 @@ function IngestModal({
             </div>
 
             {ingestSummary.errors && ingestSummary.errors.length > 0 && (
-              <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10, color: '#991b1b' }}>
+              <div style={{ padding: '8px 10px', background: 'rgba(220, 38, 38, 0.1)', border: '1px solid rgba(220, 38, 38, 0.25)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-red)' }}>
                 <div style={{ fontWeight: 700, marginBottom: 2 }}>Clone Warnings:</div>
                 {ingestSummary.errors.map((err, i) => <div key={i}>• {err}</div>)}
               </div>
@@ -3533,8 +3576,8 @@ function IngestModal({
                   onClick={() => setMode(m.id as any)}
                   style={{
                     flex: 1, padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    background: mode === m.id ? '#111' : 'var(--color-surface)',
-                    color: mode === m.id ? 'white' : 'var(--color-text-muted)',
+                    background: mode === m.id ? 'var(--color-btn-primary-bg)' : 'var(--color-surface)',
+                    color: mode === m.id ? 'var(--color-btn-primary-text)' : 'var(--color-text-muted)',
                     border: '1px solid var(--color-border)', borderRadius: 2,
                     cursor: isBusy ? 'not-allowed' : 'pointer',
                     opacity: isBusy && mode !== m.id ? 0.6 : 1,
@@ -3548,7 +3591,7 @@ function IngestModal({
             {mode === 'org' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text)', fontWeight: 600, marginBottom: 4 }}>
                     GITHUB ORGANIZATION NAME OR URL
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -3561,7 +3604,8 @@ function IngestModal({
                       style={{
                         flex: 1, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                         border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
-                        background: isBusy ? 'var(--color-surface-2)' : 'white',
+                        background: isBusy ? 'var(--color-surface-2)' : 'var(--color-input-bg)',
+                        color: 'var(--color-text)',
                         cursor: isBusy ? 'not-allowed' : 'text',
                       }}
                     />
@@ -3570,7 +3614,7 @@ function IngestModal({
                       disabled={isBusy}
                       style={{
                         padding: '7px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                        background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                        background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none', borderRadius: 2,
                         cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
                         whiteSpace: 'nowrap', opacity: isBusy ? 0.7 : 1,
                       }}
@@ -3601,8 +3645,8 @@ function IngestModal({
                           padding: '2px 8px',
                           fontSize: 10,
                           fontFamily: 'var(--font-mono)',
-                          background: orgInput === ex.name ? '#111' : '#f3f4f6',
-                          color: orgInput === ex.name ? 'white' : '#374151',
+                          background: orgInput === ex.name ? 'var(--color-btn-primary-bg)' : 'var(--color-surface-2)',
+                          color: orgInput === ex.name ? 'var(--color-btn-primary-text)' : 'var(--color-text)',
                           border: '1px solid var(--color-border)',
                           borderRadius: 2,
                           cursor: isBusy ? 'not-allowed' : 'pointer',
@@ -3623,7 +3667,7 @@ function IngestModal({
                     display: 'flex', flexDirection: 'column', gap: 8,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#111' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--color-text)' }}>
                         CHOOSE REPOSITORIES TO INGEST ({selectedOrgRepos.length} of {discoveredRepos.length} selected)
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -3632,7 +3676,7 @@ function IngestModal({
                           disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            background: 'var(--color-input-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 2,
                             cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
@@ -3643,7 +3687,7 @@ function IngestModal({
                           disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            background: 'var(--color-input-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 2,
                             cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
@@ -3654,7 +3698,7 @@ function IngestModal({
                           disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            background: 'var(--color-input-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 2,
                             cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
@@ -3672,7 +3716,8 @@ function IngestModal({
                       style={{
                         width: '100%', padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
                         border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none',
-                        background: isBusy ? 'var(--color-surface-2)' : 'white',
+                        background: isBusy ? 'var(--color-surface-2)' : 'var(--color-input-bg)',
+                        color: 'var(--color-text)',
                         cursor: isBusy ? 'not-allowed' : 'text',
                       }}
                     />
@@ -3693,7 +3738,7 @@ function IngestModal({
                               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                               padding: '5px 8px', borderRadius: 2,
                               cursor: isBusy ? 'not-allowed' : 'pointer',
-                              background: isChecked ? 'white' : 'transparent',
+                              background: isChecked ? 'var(--color-surface-2)' : 'transparent',
                               border: `1px solid ${isChecked ? 'var(--color-border-bright)' : 'transparent'}`,
                               transition: 'background 0.15s ease',
                               opacity: isBusy ? 0.7 : 1,
@@ -3705,9 +3750,9 @@ function IngestModal({
                                 checked={isChecked}
                                 disabled={isBusy}
                                 onChange={() => {}} // Handled by outer div
-                                style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+                                style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: 'var(--color-text)' }}
                               />
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: isChecked ? 600 : 400, color: '#111' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: isChecked ? 600 : 400, color: 'var(--color-text)' }}>
                                 {repoName}
                               </span>
                             </div>
@@ -3723,7 +3768,7 @@ function IngestModal({
               </div>
             ) : (
               <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text)', fontWeight: 600, marginBottom: 4 }}>
                   REPOSITORY URLS (one per line)
                 </div>
                 <textarea
@@ -3734,7 +3779,8 @@ function IngestModal({
                   style={{
                     width: '100%', height: 110, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                     border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
-                    background: isBusy ? 'var(--color-surface-2)' : 'white',
+                    background: isBusy ? 'var(--color-surface-2)' : 'var(--color-input-bg)',
+                    color: 'var(--color-text)',
                     cursor: isBusy ? 'not-allowed' : 'text',
                   }}
                 />
@@ -3748,9 +3794,9 @@ function IngestModal({
                   checked={includeAll}
                   disabled={isBusy}
                   onChange={e => setIncludeAll(e.target.checked)}
-                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: 'var(--color-text)' }}
                 />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-main)', fontWeight: 600 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text)', fontWeight: 600 }}>
                   Deep Full Ingestion (Parse all files, tests, scripts, subdirectories & notebooks)
                 </span>
               </label>
@@ -3761,7 +3807,7 @@ function IngestModal({
                   checked={wipeExisting}
                   disabled={isBusy}
                   onChange={e => setWipeExisting(e.target.checked)}
-                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: 'var(--color-text)' }}
                 />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
                   Wipe existing graph & replace
@@ -3773,7 +3819,7 @@ function IngestModal({
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10, padding: '8px 10px',
                 background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-                borderRadius: 2, color: '#111', lineHeight: 1.4,
+                borderRadius: 2, color: 'var(--color-text)', lineHeight: 1.4,
               }}>
                 {statusMsg}
               </div>
@@ -3789,7 +3835,7 @@ function IngestModal({
                 onClick={handleCloseModal}
                 style={{
                   padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                  background: 'var(--color-input-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
                 }}
               >
                 Close & View Graph
@@ -3798,7 +3844,7 @@ function IngestModal({
                 onClick={handleGoToBlueprint}
                 style={{
                   padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+                  background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
                 }}
               >
                 Select Repos for Correlation & Context →
@@ -3811,8 +3857,8 @@ function IngestModal({
                 disabled={isBusy}
                 style={{
                   padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
-                  cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : '#111',
+                  background: 'var(--color-input-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
+                  cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : 'var(--color-text)',
                 }}
               >
                 Cancel
@@ -3823,7 +3869,7 @@ function IngestModal({
                   disabled={isBusy}
                   style={{
                     padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                    background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none', borderRadius: 2,
                     cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
                     opacity: isBusy ? 0.7 : 1,
                   }}
@@ -3836,7 +3882,7 @@ function IngestModal({
                   disabled={isBusy || (mode === 'org' && selectedOrgRepos.length === 0)}
                   style={{
                     padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                    background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none', borderRadius: 2,
                     cursor: isBusy || (mode === 'org' && selectedOrgRepos.length === 0) ? 'not-allowed' : 'pointer',
                     fontWeight: 600, opacity: isBusy ? 0.7 : 1,
                   }}
@@ -3929,7 +3975,7 @@ function EngineSettingsSidebar({
       )}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: 330,
-        background: 'white', borderLeft: '1px solid var(--color-border)',
+        background: 'var(--color-card-bg)', borderLeft: '1px solid var(--color-border)',
         zIndex: 50, transform: open ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.2s cubic-bezier(.4,0,.2,1)',
         display: 'flex', flexDirection: 'column',
@@ -3940,7 +3986,7 @@ function EngineSettingsSidebar({
           padding: '12px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0,
         }}>
           <div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#111', fontWeight: 700 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text)', fontWeight: 700 }}>
               Engine Settings
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', display: 'block' }}>
@@ -3974,9 +4020,9 @@ function EngineSettingsSidebar({
                   onClick={() => setLocalCfg(c => ({ ...c, env: opt.id as 'local' | 'aws' }))}
                   style={{
                     flex: 1, padding: '6px 4px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                    background: localCfg.env === opt.id ? '#111' : 'white',
-                    color: localCfg.env === opt.id ? 'white' : 'var(--color-text-muted)',
-                    border: `1px solid ${localCfg.env === opt.id ? '#111' : 'var(--color-border)'}`,
+                    background: localCfg.env === opt.id ? 'var(--color-btn-primary-bg)' : 'var(--color-input-bg)',
+                    color: localCfg.env === opt.id ? 'var(--color-btn-primary-text)' : 'var(--color-text-muted)',
+                    border: `1px solid ${localCfg.env === opt.id ? 'var(--color-btn-primary-bg)' : 'var(--color-border)'}`,
                     borderRadius: 2, cursor: 'pointer', fontWeight: localCfg.env === opt.id ? 600 : 400,
                   }}
                 >
@@ -3992,8 +4038,8 @@ function EngineSettingsSidebar({
               value={localCfg.model}
               onChange={e => setLocalCfg(c => ({ ...c, model: e.target.value }))}
               style={{
-                width: '100%', padding: '6px 8px', background: 'white',
-                border: '1px solid var(--color-border-bright)', color: '#111',
+                width: '100%', padding: '6px 8px', background: 'var(--color-input-bg)',
+                border: '1px solid var(--color-border-bright)', color: 'var(--color-text)',
                 fontFamily: 'var(--font-mono)', fontSize: 11, borderRadius: 2, outline: 'none',
               }}
             >
@@ -4015,9 +4061,9 @@ function EngineSettingsSidebar({
                     onClick={() => setLocalCfg(c => ({ ...c, tokenBudget: b }))}
                     style={{
                       flex: 1, padding: '4px 0', fontFamily: 'var(--font-mono)', fontSize: 9,
-                      background: localCfg.tokenBudget === b ? 'var(--color-surface-2)' : 'white',
-                      border: `1px solid ${localCfg.tokenBudget === b ? '#111' : 'var(--color-border)'}`,
-                      color: localCfg.tokenBudget === b ? '#111' : 'var(--color-text-muted)',
+                      background: localCfg.tokenBudget === b ? 'var(--color-surface-2)' : 'var(--color-input-bg)',
+                      border: `1px solid ${localCfg.tokenBudget === b ? 'var(--color-text)' : 'var(--color-border)'}`,
+                      color: localCfg.tokenBudget === b ? 'var(--color-text)' : 'var(--color-text-muted)',
                       borderRadius: 2, cursor: 'pointer', fontWeight: localCfg.tokenBudget === b ? 700 : 400,
                     }}
                   >
@@ -4030,9 +4076,9 @@ function EngineSettingsSidebar({
                   type="range" min={1024} max={16384} step={512}
                   value={localCfg.tokenBudget}
                   onChange={e => setLocalCfg(c => ({ ...c, tokenBudget: Number(e.target.value) }))}
-                  style={{ flex: 1, accentColor: '#111', height: 2 }}
+                  style={{ flex: 1, accentColor: 'var(--color-text)', height: 2 }}
                 />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', minWidth: 42, textAlign: 'right' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text)', minWidth: 42, textAlign: 'right' }}>
                   {localCfg.tokenBudget}
                 </span>
               </div>
@@ -4048,9 +4094,9 @@ function EngineSettingsSidebar({
                   onClick={() => setLocalCfg(c => ({ ...c, maxDepth: d }))}
                   style={{
                     flex: 1, padding: '5px 0', fontFamily: 'var(--font-mono)', fontSize: 10,
-                    background: localCfg.maxDepth === d ? '#111' : 'white',
-                    color: localCfg.maxDepth === d ? 'white' : 'var(--color-text-muted)',
-                    border: `1px solid ${localCfg.maxDepth === d ? '#111' : 'var(--color-border)'}`,
+                    background: localCfg.maxDepth === d ? 'var(--color-btn-primary-bg)' : 'var(--color-input-bg)',
+                    color: localCfg.maxDepth === d ? 'var(--color-btn-primary-text)' : 'var(--color-text-muted)',
+                    border: `1px solid ${localCfg.maxDepth === d ? 'var(--color-btn-primary-bg)' : 'var(--color-border)'}`,
                     borderRadius: 2, cursor: 'pointer',
                   }}
                 >
@@ -4070,7 +4116,7 @@ function EngineSettingsSidebar({
                 borderRadius: 2, cursor: 'pointer', background: 'var(--color-surface)',
               }}
             >
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text)' }}>
                 Infinite loop circuit breaker
               </span>
               <span style={{
@@ -4084,7 +4130,7 @@ function EngineSettingsSidebar({
 
           {/* 6. Re-Index Database Action */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16, marginTop: 12 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text)', fontWeight: 600, marginBottom: 4 }}>
               CACHE & CODEBASE INDEX
             </div>
             <button
@@ -4092,7 +4138,7 @@ function EngineSettingsSidebar({
               disabled={reindexing}
               style={{
                 width: '100%', padding: '7px 0', fontFamily: 'var(--font-mono)', fontSize: 10,
-                background: 'white', color: '#111', border: '1px solid var(--color-border-bright)',
+                background: 'var(--color-input-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border-bright)',
                 borderRadius: 2, cursor: reindexing ? 'not-allowed' : 'pointer', fontWeight: 600,
               }}
             >
@@ -4103,7 +4149,7 @@ function EngineSettingsSidebar({
               disabled={clearing}
               style={{
                 width: '100%', padding: '7px 0', fontFamily: 'var(--font-mono)', fontSize: 10,
-                background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+                background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)',
                 borderRadius: 2, cursor: clearing ? 'not-allowed' : 'pointer', fontWeight: 600,
                 marginTop: 8,
               }}
@@ -4124,7 +4170,7 @@ function EngineSettingsSidebar({
             onClick={() => { onSave(localCfg); onClose() }}
             style={{
               width: '100%', padding: '8px 0', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: '#111', color: 'white', border: 'none',
+              background: 'var(--color-btn-primary-bg)', color: 'var(--color-btn-primary-text)', border: 'none',
               borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
@@ -4208,20 +4254,35 @@ export default function App() {
     setDataVersion(v => v + 1)
   }
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('crosscontext_theme') as 'light' | 'dark') || 'dark'
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    localStorage.setItem('crosscontext_theme', theme)
+  }, [theme])
+
   const availableRepos = stats.repositories || []
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'white', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--color-bg)', color: 'var(--color-text)', overflow: 'hidden' }}>
       {/* Top Navigation Bar */}
       <header style={{
         display: 'flex', alignItems: 'center', height: 44,
         borderBottom: '1px solid var(--color-border)',
         padding: '0 14px', flexShrink: 0, gap: 0,
+        background: 'var(--color-header-bg)',
       }}>
         {/* Wordmark */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginRight: 24 }}>
-          <div style={{ width: 8, height: 8, background: '#111', borderRadius: 1, transform: 'rotate(45deg)' }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111', letterSpacing: -0.3 }}>
+          <div style={{ width: 8, height: 8, background: 'var(--color-accent)', borderRadius: 1, transform: 'rotate(45deg)' }} />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--color-text)', letterSpacing: -0.3 }}>
             CrossContext
           </span>
           <span style={{
@@ -4247,8 +4308,8 @@ export default function App() {
               style={{
                 padding: '0 14px', height: 44, fontFamily: 'var(--font-mono)', fontSize: 12,
                 background: 'transparent', border: 'none', cursor: 'pointer',
-                color: tab === item.id ? '#111' : 'var(--color-text-muted)',
-                borderBottom: tab === item.id ? '2px solid #111' : '2px solid transparent',
+                color: tab === item.id ? 'var(--color-text)' : 'var(--color-text-muted)',
+                borderBottom: tab === item.id ? '2px solid var(--color-text)' : '2px solid transparent',
                 marginBottom: -1, fontWeight: tab === item.id ? 600 : 400
               }}
             >
@@ -4257,8 +4318,8 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Quick Stats, Ingest Button & Engine Settings Trigger */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Quick Stats, Ingest Button, Theme Toggle & Engine Settings Trigger */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', gap: 14 }}>
             {[
               { label: 'REPOS', value: String(stats.repositories.length) },
@@ -4266,12 +4327,25 @@ export default function App() {
               { label: 'CROSS-LINKS', value: String(stats.cross_repo_edges) },
             ].map(s => (
               <div key={s.label} style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', lineHeight: 1.2, fontWeight: 600 }}>{s.value}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text)', lineHeight: 1.2, fontWeight: 600 }}>{s.value}</div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1 }}>{s.label}</div>
               </div>
             ))}
           </div>
           <div style={{ width: 1, height: 18, background: 'var(--color-border)' }} />
+          <button
+            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{
+              padding: '4px 9px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: 'var(--color-surface)', border: '1px solid var(--color-border-bright)',
+              color: 'var(--color-text)', borderRadius: 2, cursor: 'pointer', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            <span style={{ fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 0.5 }}>THEME:</span>
+            <span style={{ fontWeight: 600 }}>{theme.toUpperCase()}</span>
+          </button>
           <button
             onClick={() => {
               setIngestInitialOrg('')
@@ -4279,8 +4353,8 @@ export default function App() {
             }}
             style={{
               padding: '4px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: '#111', border: '1px solid #111',
-              color: 'white', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+              background: 'var(--color-btn-primary-bg)', border: '1px solid var(--color-btn-primary-bg)',
+              color: 'var(--color-btn-primary-text)', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
             + Ingest Repos
@@ -4289,8 +4363,8 @@ export default function App() {
             onClick={() => setSettingsOpen(true)}
             style={{
               padding: '4px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: 'white', border: '1px solid var(--color-border-bright)',
-              color: '#111', borderRadius: 2, cursor: 'pointer', fontWeight: 500,
+              background: 'var(--color-card-bg)', border: '1px solid var(--color-border-bright)',
+              color: 'var(--color-text)', borderRadius: 2, cursor: 'pointer', fontWeight: 500,
             }}
           >
             engine settings
