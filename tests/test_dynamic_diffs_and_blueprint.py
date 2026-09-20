@@ -116,3 +116,29 @@ def test_org_blueprint_generation(memory_tool_manager):
     assert "repo_backend" in ai_context
     assert "repo_frontend" in ai_context
     assert "--consumes_api [POST /v1/auth/verify]-->" in ai_context
+
+
+def test_org_blueprint_repo_filtering(memory_tool_manager):
+    """Verifies selective filtering of repositories to isolate correlation and context."""
+    generator = OrgContextGenerator(memory_tool_manager.graph_store)
+
+    # 1. Filter with both connected repositories
+    analysis_both = generator.analyze_organization(filter_repos=["repo_backend", "repo_frontend"])
+    assert analysis_both["is_filtered"] is True
+    assert len(analysis_both["selected_repositories"]) == 2
+    assert analysis_both["cross_repo_contracts_count"] == 1
+
+    ctx_both = generator.generate_ai_optimized_context(filter_repos=["repo_backend", "repo_frontend"])
+    assert "Scoped Subset: repo_backend, repo_frontend" in ctx_both
+    assert "--consumes_api [POST /v1/auth/verify]-->" in ctx_both
+
+    # 2. Filter with only one repository (no inter-repo contracts)
+    analysis_single = generator.analyze_organization(filter_repos=["repo_backend"])
+    assert analysis_single["is_filtered"] is True
+    assert len(analysis_single["selected_repositories"]) == 1
+    assert analysis_single["cross_repo_contracts_count"] == 0
+
+    ctx_single = generator.generate_ai_optimized_context(filter_repos=["repo_backend"])
+    assert "Scoped Subset: repo_backend" in ctx_single
+    assert "No cross-repo contracts detected between selected repositories" in ctx_single
+
