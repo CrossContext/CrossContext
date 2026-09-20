@@ -2394,54 +2394,90 @@ function IngestModal({
   const [customUrls, setCustomUrls] = useState('')
   const [wipeExisting, setWipeExisting] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoveredRepos, setDiscoveredRepos] = useState<string[]>([])
+  const [selectedOrgRepos, setSelectedOrgRepos] = useState<string[]>([])
+  const [repoSearchFilter, setRepoSearchFilter] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
   const [ingestSummary, setIngestSummary] = useState<IngestSummaryData | null>(null)
 
   if (!open) return null
 
-  const handleStartIngest = async () => {
-    setLoading(true)
-    setStatusMsg('Discovering repositories...')
+  const handleDiscoverOrg = async () => {
+    if (!orgInput.trim()) {
+      setStatusMsg('Please enter an organization name or GitHub URL.')
+      return
+    }
+    setDiscovering(true)
+    setStatusMsg(`Discovering repositories for '${orgInput.trim()}'...`)
+    setDiscoveredRepos([])
+    setSelectedOrgRepos([])
 
+    try {
+      const discRes = await fetch('http://localhost:8000/api/repos/discover-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org: orgInput.trim() }),
+      })
+      const discData = await discRes.json()
+      if (!discData.repositories || discData.repositories.length === 0) {
+        setStatusMsg(`No public repositories found for '${orgInput.trim()}'.`)
+        setDiscovering(false)
+        return
+      }
+
+      setDiscoveredRepos(discData.repositories)
+      setSelectedOrgRepos(discData.repositories)
+      setStatusMsg(`Discovered ${discData.repositories.length} repositories for '${orgInput.trim()}'. Select the repositories you wish to ingest below:`)
+    } catch (e: any) {
+      setStatusMsg(`Discovery failed: ${e.message}`)
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  const handleToggleRepo = (url: string) => {
+    setSelectedOrgRepos(prev =>
+      prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]
+    )
+  }
+
+  const handleSelectAllDiscovered = () => {
+    setSelectedOrgRepos(discoveredRepos)
+  }
+
+  const handleClearAllDiscovered = () => {
+    setSelectedOrgRepos([])
+  }
+
+  const handleSelectTopN = (n: number) => {
+    setSelectedOrgRepos(discoveredRepos.slice(0, n))
+  }
+
+  const handleStartIngest = async () => {
     let targetUrls: string[] = []
 
     if (mode === 'org') {
-      if (!orgInput.trim()) {
-        setStatusMsg('Please enter an organization name or URL.')
-        setLoading(false)
+      if (discoveredRepos.length === 0) {
+        await handleDiscoverOrg()
         return
       }
-      try {
-        const discRes = await fetch('http://localhost:8000/api/repos/discover-org', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ org: orgInput.trim() }),
-        })
-        const discData = await discRes.json()
-        if (!discData.repositories || discData.repositories.length === 0) {
-          setStatusMsg(`No repositories found for '${orgInput}'.`)
-          setLoading(false)
-          return
-        }
-        // Ingest ALL discovered repositories without numeric limitation
-        targetUrls = discData.repositories
-        setStatusMsg(`Discovered all ${targetUrls.length} repositories for '${orgInput}'. Ingesting and indexing AST boundaries...`)
-      } catch (e: any) {
-        setStatusMsg(`Discovery failed: ${e.message}`)
-        setLoading(false)
+      if (selectedOrgRepos.length === 0) {
+        setStatusMsg('Please select at least one repository to ingest.')
         return
       }
+      targetUrls = selectedOrgRepos
     } else {
       targetUrls = customUrls.split('\n').map(u => u.trim()).filter(Boolean)
       if (targetUrls.length === 0) {
         setStatusMsg('Please enter at least one repository URL.')
-        setLoading(false)
         return
       }
     }
 
+    setLoading(true)
     try {
-      setStatusMsg(`Cloning & indexing all ${targetUrls.length} repositories into deterministic AST graph...`)
+      setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into deterministic AST graph...`)
       const res = await fetch('http://localhost:8000/api/repos/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2476,12 +2512,16 @@ function IngestModal({
 
   const handleCloseModal = () => {
     setIngestSummary(null)
+    setDiscoveredRepos([])
+    setSelectedOrgRepos([])
     setStatusMsg('')
     onClose()
   }
 
   const handleGoToBlueprint = () => {
     setIngestSummary(null)
+    setDiscoveredRepos([])
+    setSelectedOrgRepos([])
     setStatusMsg('')
     onClose()
     if (onNavigateToBlueprint) {
@@ -2489,12 +2529,18 @@ function IngestModal({
     }
   }
 
+  const filteredDiscoveredRepos = discoveredRepos.filter(u => {
+    if (!repoSearchFilter.trim()) return true
+    const repoName = u.split('/').pop()?.replace('.git', '') || u
+    return repoName.toLowerCase().includes(repoSearchFilter.toLowerCase())
+  })
+
   return (
     <>
       <div onClick={handleCloseModal} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: ingestSummary ? 560 : 500, background: 'white', border: '1px solid var(--color-border)',
+        width: ingestSummary ? 560 : 580, background: 'white', border: '1px solid var(--color-border)',
         borderRadius: 4, zIndex: 70, boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
         display: 'flex', flexDirection: 'column', maxHeight: '90vh',
       }}>
@@ -2569,11 +2615,11 @@ function IngestModal({
           </div>
         ) : (
           /* Ingestion Input Form */
-          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
             {/* Mode Selector */}
             <div style={{ display: 'flex', gap: 4 }}>
               {[
-                { id: 'org', label: 'GitHub Organization (Ingest All)' },
+                { id: 'org', label: 'GitHub Organization (Discover & Choose)' },
                 { id: 'custom', label: 'Custom Repo URLs' },
               ].map(m => (
                 <button
@@ -2592,22 +2638,130 @@ function IngestModal({
             </div>
 
             {mode === 'org' ? (
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
-                  GITHUB ORGANIZATION NAME OR URL
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                    GITHUB ORGANIZATION NAME OR URL
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      value={orgInput}
+                      onChange={e => setOrgInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleDiscoverOrg()}
+                      placeholder="e.g. Project-HAMi, pallets, fastapi, or https://github.com/Project-HAMi"
+                      style={{
+                        flex: 1, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                        border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={handleDiscoverOrg}
+                      disabled={discovering}
+                      style={{
+                        padding: '7px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                        background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                        cursor: discovering ? 'not-allowed' : 'pointer', fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {discovering ? 'Discovering...' : 'Discover Repos'}
+                    </button>
+                  </div>
                 </div>
-                <input
-                  value={orgInput}
-                  onChange={e => setOrgInput(e.target.value)}
-                  placeholder="e.g. pallets, meshery, fastapi, tiangolo, or https://github.com/orgs/pallets/repositories"
-                  style={{
-                    width: '100%', padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
-                  }}
-                />
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', marginTop: 6 }}>
-                  All public repositories in this organization will be discovered and ingested into the knowledge graph without limits.
-                </div>
+
+                {/* Discovered Repository Multi-Select List */}
+                {discoveredRepos.length > 0 && (
+                  <div style={{
+                    border: '1px solid var(--color-border)', borderRadius: 3,
+                    background: 'var(--color-surface)', padding: '10px 12px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#111' }}>
+                        CHOOSE REPOSITORIES TO INGEST ({selectedOrgRepos.length} of {discoveredRepos.length} selected)
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={handleSelectAllDiscovered}
+                          style={{
+                            padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                          }}
+                        >
+                          All ({discoveredRepos.length})
+                        </button>
+                        <button
+                          onClick={() => handleSelectTopN(5)}
+                          style={{
+                            padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                          }}
+                        >
+                          Top 5
+                        </button>
+                        <button
+                          onClick={handleClearAllDiscovered}
+                          style={{
+                            padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Input for Repos */}
+                    <input
+                      value={repoSearchFilter}
+                      onChange={e => setRepoSearchFilter(e.target.value)}
+                      placeholder="Filter discovered repositories..."
+                      style={{
+                        width: '100%', padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                        border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none', background: 'white',
+                      }}
+                    />
+
+                    {/* Scrollable Repository Checkbox List */}
+                    <div style={{
+                      maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4,
+                      paddingRight: 4,
+                    }}>
+                      {filteredDiscoveredRepos.map(url => {
+                        const repoName = url.split('/').pop()?.replace('.git', '') || url
+                        const isChecked = selectedOrgRepos.includes(url)
+                        return (
+                          <div
+                            key={url}
+                            onClick={() => handleToggleRepo(url)}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '5px 8px', borderRadius: 2, cursor: 'pointer',
+                              background: isChecked ? 'white' : 'transparent',
+                              border: `1px solid ${isChecked ? 'var(--color-border-bright)' : 'transparent'}`,
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}} // Handled by outer div
+                                style={{ cursor: 'pointer', accentColor: '#111' }}
+                              />
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: isChecked ? 600 : 400, color: '#111' }}>
+                                {repoName}
+                              </span>
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)' }}>
+                              {url.replace('https://github.com/', '')}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -2617,9 +2771,9 @@ function IngestModal({
                 <textarea
                   value={customUrls}
                   onChange={e => setCustomUrls(e.target.value)}
-                  placeholder="https://github.com/fastapi/fastapi&#10;https://github.com/encode/starlette"
+                  placeholder="https://github.com/Project-HAMi/HAMi&#10;https://github.com/Project-HAMi/HAMi-core&#10;https://github.com/Project-HAMi/HAMi-WebUI"
                   style={{
-                    width: '100%', height: 100, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    width: '100%', height: 110, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                     border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
                   }}
                 />
@@ -2635,9 +2789,9 @@ function IngestModal({
 
             {statusMsg && (
               <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 10px',
+                fontFamily: 'var(--font-mono)', fontSize: 10, padding: '8px 10px',
                 background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-                borderRadius: 2, color: '#111',
+                borderRadius: 2, color: '#111', lineHeight: 1.4,
               }}>
                 {statusMsg}
               </div>
@@ -2679,16 +2833,33 @@ function IngestModal({
               >
                 Cancel
               </button>
-              <button
-                onClick={handleStartIngest}
-                disabled={loading}
-                style={{
-                  padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600,
-                }}
-              >
-                {loading ? 'Ingesting All Repositories...' : 'Start Ingestion'}
-              </button>
+              {mode === 'org' && discoveredRepos.length === 0 ? (
+                <button
+                  onClick={handleDiscoverOrg}
+                  disabled={discovering}
+                  style={{
+                    padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: discovering ? 'not-allowed' : 'pointer', fontWeight: 600,
+                  }}
+                >
+                  {discovering ? 'Discovering Repositories...' : 'Discover Repositories'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartIngest}
+                  disabled={loading || (mode === 'org' && selectedOrgRepos.length === 0)}
+                  style={{
+                    padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading || (mode === 'org' && selectedOrgRepos.length === 0) ? 'not-allowed' : 'pointer', fontWeight: 600,
+                  }}
+                >
+                  {loading
+                    ? 'Cloning & Indexing...'
+                    : mode === 'org'
+                    ? `Ingest Selected (${selectedOrgRepos.length}) Repositories`
+                    : 'Start Ingestion'}
+                </button>
+              )}
             </>
           )}
         </div>
