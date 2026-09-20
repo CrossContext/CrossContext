@@ -68,8 +68,14 @@ class TreeSitterEngine:
         else:
             return self._parse_generic(repo, norm_path, content)
 
-    def parse_directory(self, repo: str, root_dir: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Recursively parses all supported source files in a repository directory."""
+    def parse_directory(
+        self,
+        repo: str,
+        root_dir: str,
+        max_files: int = 150,
+        progress_cb: Optional[Any] = None
+    ) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Recursively parses core architecture source files in a repository directory."""
         all_nodes: List[CodeNode] = []
         all_edges: List[CodeEdge] = []
         root_path = Path(root_dir)
@@ -87,22 +93,34 @@ class TreeSitterEngine:
         ignored_patterns = {
             ".venv", "venv", "node_modules", "vendor", "__pycache__",
             ".git", "dist", "build", "target", "bin", "obj", ".gradle",
-            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo", "third_party", "deps"
+            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo",
+            "third_party", "deps", "docs", "documentation", "website", "site",
+            "tests", "test", "fixtures", "mocks", "examples", "benchmark", "benchmarks"
         }
 
+        candidates = []
         for file in root_path.rglob("*"):
             if file.is_file() and file.suffix in valid_extensions:
                 rel = file.relative_to(root_path).as_posix()
                 rel_parts = set(rel.split("/"))
-                if rel_parts.intersection(ignored_patterns):
-                    continue
-                try:
-                    content = file.read_text(encoding="utf-8", errors="replace")
-                    nodes, edges = self.parse_file(repo, rel, content)
-                    all_nodes.extend(nodes)
-                    all_edges.extend(edges)
-                except Exception as e:
-                    print(f"[Parser] Skipping {rel}: {e}")
+                if not rel_parts.intersection(ignored_patterns):
+                    candidates.append((file, rel))
+
+        # Prioritize root entrypoints, controllers, and primary package modules
+        candidates.sort(key=lambda x: len(x[1].split("/")))
+        selected = candidates[:max_files]
+        total_selected = len(selected)
+
+        for idx, (file, rel) in enumerate(selected):
+            try:
+                content = file.read_text(encoding="utf-8", errors="replace")
+                nodes, edges = self.parse_file(repo, rel, content)
+                all_nodes.extend(nodes)
+                all_edges.extend(edges)
+                if progress_cb and (idx % 15 == 0 or idx == total_selected - 1):
+                    progress_cb("parsing", f"Parsing AST symbols in {repo} ({idx+1}/{total_selected} files)...", 0.5 + (0.2 * (idx / max(total_selected, 1))))
+            except Exception as e:
+                print(f"[Parser] Skipping {rel}: {e}")
 
         # If repository contains no standard code nodes (e.g. documentation-only or configuration repo)
         if not all_nodes and root_path.exists():
