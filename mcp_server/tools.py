@@ -27,8 +27,11 @@ class CodeGraphToolManager:
         all_nodes: List[CodeNode] = []
         all_edges: List[CodeEdge] = []
 
-        for repo_name, path in repo_paths.items():
-            nodes, edges = self.parser.parse_directory(repo_name, path)
+        total_repos = len(repo_paths)
+        for idx, (repo_name, path) in enumerate(repo_paths.items()):
+            if progress_cb:
+                progress_cb("parsing", f"Parsing AST symbols in {repo_name} ({idx+1}/{total_repos})...", 0.5 + (0.2 * (idx / max(total_repos, 1))))
+            nodes, edges = self.parser.parse_directory(repo_name, path, progress_cb=progress_cb)
             all_nodes.extend(nodes)
             all_edges.extend(edges)
 

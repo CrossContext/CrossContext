@@ -99,12 +99,25 @@ class TreeSitterEngine:
         }
 
         candidates = []
-        for file in root_path.rglob("*"):
-            if file.is_file() and file.suffix in valid_extensions:
-                rel = file.relative_to(root_path).as_posix()
-                rel_parts = set(rel.split("/"))
-                if not rel_parts.intersection(ignored_patterns):
-                    candidates.append((file, rel))
+        for root, dirs, files in os.walk(root_dir):
+            # Prune directories in-place so os.walk NEVER descends into them
+            dirs[:] = [
+                d for d in dirs
+                if d.lower() not in ignored_patterns
+                and not d.startswith(".")
+                and not any(p in d.lower() for p in ("node_modules", "vendor", "test", "docs"))
+            ]
+            for f in files:
+                ext = Path(f).suffix.lower()
+                if ext in valid_extensions:
+                    full_p = Path(root) / f
+                    try:
+                        rel = full_p.relative_to(root_path).as_posix()
+                        candidates.append((full_p, rel))
+                    except Exception:
+                        pass
+            if len(candidates) >= max_files * 2:
+                break
 
         # Prioritize root entrypoints, controllers, and primary package modules
         candidates.sort(key=lambda x: len(x[1].split("/")))
