@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { DEFAULT_NODES, DEFAULT_EDGES, DEFAULT_STATS } from './defaultData'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -2267,14 +2268,69 @@ function AgentPanel({
                 </details>
               )}
 
-              {/* Main Response Body */}
+              {/* Main Response Body with Rich Markdown */}
               <div style={{
                 color: 'var(--color-text)',
                 fontSize: 11,
                 lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
               }}>
-                {msg.text}
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p style={{ margin: '0 0 8px 0', lineHeight: 1.6 }}>{children}</p>,
+                    strong: ({ children }) => <strong style={{ fontWeight: 700, color: 'var(--color-text)' }}>{children}</strong>,
+                    em: ({ children }) => <em style={{ fontStyle: 'italic', color: 'var(--color-text)' }}>{children}</em>,
+                    h1: ({ children }) => <h1 style={{ fontSize: 13, fontWeight: 700, margin: '8px 0 4px', color: 'var(--color-text)' }}>{children}</h1>,
+                    h2: ({ children }) => <h2 style={{ fontSize: 12, fontWeight: 700, margin: '8px 0 4px', color: 'var(--color-text)' }}>{children}</h2>,
+                    h3: ({ children }) => <h3 style={{ fontSize: 11, fontWeight: 700, margin: '6px 0 4px', color: 'var(--color-text)' }}>{children}</h3>,
+                    ul: ({ children }) => <ul style={{ margin: '4px 0 8px 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{children}</ul>,
+                    ol: ({ children }) => <ol style={{ margin: '4px 0 8px 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{children}</ol>,
+                    li: ({ children }) => <li style={{ lineHeight: 1.5 }}>{children}</li>,
+                    pre: ({ children }) => (
+                      <pre style={{
+                        margin: '6px 0',
+                        padding: '8px 10px',
+                        background: '#0D1117',
+                        color: '#E6EDF3',
+                        borderRadius: 4,
+                        overflowX: 'auto',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        lineHeight: 1.4,
+                      }}>
+                        {children}
+                      </pre>
+                    ),
+                    code: ({ className, children, ...props }: any) => (
+                      <code
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          background: className ? 'transparent' : 'var(--color-surface-2)',
+                          color: className ? 'inherit' : 'var(--color-blue)',
+                          padding: className ? 0 : '1px 4px',
+                          borderRadius: 3,
+                          border: className ? 'none' : '1px solid var(--color-border)',
+                        }}
+                        className={className}
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    ),
+                    blockquote: ({ children }) => (
+                      <blockquote style={{
+                        borderLeft: '3px solid var(--color-blue)',
+                        margin: '6px 0',
+                        padding: '2px 8px',
+                        color: 'var(--color-text-muted)',
+                      }}>
+                        {children}
+                      </blockquote>
+                    ),
+                  }}
+                >
+                  {msg.text}
+                </ReactMarkdown>
               </div>
 
               {/* Optional Inline Action Button (e.g. Ingest Repositories) */}
