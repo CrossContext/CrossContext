@@ -740,9 +740,9 @@ function CrossRepoGraph({
                     </button>
                   </div>
 
-                  {/* Pallets */}
+                  {/* Express.js */}
                   <div
-                    onClick={() => onOpenIngest?.('pallets')}
+                    onClick={() => onOpenIngest?.('expressjs')}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -766,18 +766,18 @@ function CrossRepoGraph({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#047857' }}>
-                          pallets
+                          expressjs
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
-                          (Python Web Framework Ecosystem)
+                          (Fast, Unopinionated Node.js Web Framework Ecosystem)
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Includes flask, werkzeug, jinja, click, markupsafe
+                        Includes express, body-parser, cors, multer, morgan, session
                       </div>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('pallets'); }}
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('expressjs'); }}
                       style={{
                         padding: '4px 10px',
                         fontSize: 10,
@@ -790,13 +790,13 @@ function CrossRepoGraph({
                         fontWeight: 600,
                       }}
                     >
-                      Ingest pallets
+                      Ingest expressjs
                     </button>
                   </div>
 
-                  {/* Encode */}
+                  {/* Redux */}
                   <div
-                    onClick={() => onOpenIngest?.('encode')}
+                    onClick={() => onOpenIngest?.('reduxjs')}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -820,18 +820,18 @@ function CrossRepoGraph({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#6d28d9' }}>
-                          encode
+                          reduxjs
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
-                          (High-Performance Async Python Stack)
+                          (Predictable State Management and Developer Tools Ecosystem)
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Includes httpx, starlette, uvicorn, databases
+                        Includes redux, redux-toolkit, react-redux, reselect
                       </div>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('encode'); }}
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('reduxjs'); }}
                       style={{
                         padding: '4px 10px',
                         fontSize: 10,
@@ -844,7 +844,7 @@ function CrossRepoGraph({
                         fontWeight: 600,
                       }}
                     >
-                      Ingest encode
+                      Ingest reduxjs
                     </button>
                   </div>
                 </div>
