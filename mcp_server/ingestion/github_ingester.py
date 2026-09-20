@@ -130,7 +130,7 @@ class GitHubRepoIngester:
                         page_found = 0
                         for m in matches:
                             m_clean = m.strip()
-                            if m_clean.lower() not in ignored_names and not m_clean.startswith(".") and m_clean not in seen:
+                            if m_clean.lower() not in ignored_names and (not m_clean.startswith(".") or m_clean == ".github") and m_clean not in seen:
                                 seen.append(m_clean)
                                 page_found += 1
                         if page_found == 0:

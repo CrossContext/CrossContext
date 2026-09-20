@@ -104,6 +104,26 @@ class TreeSitterEngine:
                 except Exception as e:
                     print(f"[Parser] Skipping {rel}: {e}")
 
+        # If repository contains no standard code nodes (e.g. documentation-only or configuration repo)
+        if not all_nodes and root_path.exists():
+            doc_candidates = list(root_path.glob("profile/README*")) or list(root_path.glob("README*")) or list(root_path.glob("*.md"))
+            doc_file = doc_candidates[0] if doc_candidates else None
+            doc_rel = doc_file.relative_to(root_path).as_posix() if doc_file else "README.md"
+            doc_text = doc_file.read_text(encoding="utf-8", errors="replace")[:1000] if doc_file and doc_file.is_file() else ""
+            all_nodes.append(CodeNode(
+                id=CodeNode.generate_id(repo, doc_rel, repo, 1),
+                repo=repo,
+                file_path=doc_rel,
+                symbol_name=repo,
+                symbol_type=SymbolType.VARIABLE,
+                start_line=1,
+                end_line=max(1, len(doc_text.splitlines())),
+                signature=f"repository {repo}",
+                docstring=doc_text[:200].strip(),
+                code_content=doc_text,
+                metadata={"is_documentation_repo": True}
+            ))
+
         return all_nodes, all_edges
 
     @staticmethod
