@@ -1845,18 +1845,69 @@ function OrgBlueprintView() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [selectedRepos, setSelectedRepos] = useState<string[]>([])
+  const [availableRepos, setAvailableRepos] = useState<string[]>([])
+  const [initialized, setInitialized] = useState(false)
+
+  const loadBlueprint = useCallback(async (reposToFilter?: string[], overrideAvailable?: string[]) => {
+    setLoading(true)
+    try {
+      const currentAvailable = overrideAvailable || availableRepos
+      const hasFilter = reposToFilter && reposToFilter.length > 0 && currentAvailable.length > 0 && reposToFilter.length < currentAvailable.length
+      const url = hasFilter
+        ? `http://localhost:8000/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
+        : 'http://localhost:8000/api/org/blueprint'
+
+      const res = await fetch(url)
+      const d = await res.json()
+      setData(d)
+
+      const all = d.all_repositories || (d.analysis?.repositories ? d.analysis.repositories.map((r: any) => r.repo_name) : [])
+      if (all && all.length > 0 && !initialized) {
+        setAvailableRepos(all)
+        setSelectedRepos(all)
+        setInitialized(true)
+      }
+    } catch {
+      // Retain existing state on fetch failure
+    } finally {
+      setLoading(false)
+    }
+  }, [availableRepos, initialized])
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/org/blueprint')
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
+    loadBlueprint()
   }, [])
 
-  if (loading) {
+  const handleToggleRepo = (repoName: string) => {
+    const next = selectedRepos.includes(repoName)
+      ? selectedRepos.filter(r => r !== repoName)
+      : [...selectedRepos, repoName]
+    setSelectedRepos(next)
+    if (next.length > 0) {
+      loadBlueprint(next)
+    }
+  }
+
+  const handleSelectAll = () => {
+    setSelectedRepos(availableRepos)
+    loadBlueprint(availableRepos)
+  }
+
+  const handleClearAll = () => {
+    setSelectedRepos([])
+  }
+
+  const handleSelectPair = (repoA: string, repoB: string) => {
+    const pair = [repoA, repoB]
+    setSelectedRepos(pair)
+    loadBlueprint(pair)
+  }
+
+  if (loading && !data) {
     return (
       <div style={{ padding: 40, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)' }}>
-        loading federated organization architecture blueprint...
+        Loading federated organization architecture blueprint...
       </div>
     )
   }
@@ -1870,6 +1921,7 @@ function OrgBlueprintView() {
   }
 
   const { analysis, ai_context, approx_tokens } = data
+  const isFiltered = selectedRepos.length > 0 && selectedRepos.length < availableRepos.length
 
   const handleCopy = () => {
     navigator.clipboard.writeText(ai_context)
@@ -1882,13 +1934,13 @@ function OrgBlueprintView() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'ORG_CONTEXT.txt'
+    a.download = isFiltered ? 'TARGETED_ORG_CONTEXT.txt' : 'ORG_CONTEXT.txt'
     a.click()
   }
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Title & Overview */}
+    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Title & Actions Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: '#111', margin: '0 0 4px' }}>
@@ -1917,90 +1969,280 @@ function OrgBlueprintView() {
               borderRadius: 2, cursor: 'pointer', fontWeight: 600,
             }}
           >
-            Download ORG_CONTEXT.txt
+            {isFiltered ? 'Download TARGETED_ORG_CONTEXT.txt' : 'Download ORG_CONTEXT.txt'}
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        {[
-          { label: 'TOTAL REPOSITORIES', value: analysis.total_repositories },
-          { label: 'SOURCE FILES', value: analysis.total_files },
-          { label: 'DETERMINISTIC SYMBOLS', value: analysis.total_symbols },
-          { label: 'CROSS-REPO API CONTRACTS', value: analysis.cross_repo_contracts_count },
-        ].map(kpi => (
-          <div key={kpi.label} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '14px 16px' }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: '#111' }}>{kpi.value}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 4 }}>{kpi.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Cross-Repo API Contract Matrix Table */}
-      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
-            INTER-REPOSITORY API CONTRACT MATRIX ({analysis.cross_repo_contracts_count})
-          </span>
-        </div>
-        {analysis.cross_repo_contracts && analysis.cross_repo_contracts.length > 0 ? (
+      {/* Interactive Repository Selection & Correlation Filter */}
+      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '16px 18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
-              padding: '8px 16px', background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)',
-              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', fontWeight: 600,
-            }}>
-              <span>CONSUMER FILE & SYMBOL</span>
-              <span>CONSUMER REPO</span>
-              <span>RELATIONSHIP</span>
-              <span>PRODUCER REPO</span>
-              <span>ENDPOINT SYMBOL</span>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+              SELECT REPOSITORIES FOR CORRELATION & CONTEXT SCOPE
             </div>
-            {analysis.cross_repo_contracts.map((c: any, i: number) => (
-              <div
-                key={i}
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', marginTop: 2 }}>
+              Choose a subset of ingested repositories to inspect mutual contracts, dependencies, and generate targeted cross-repo AI context.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={handleSelectAll}
+              style={{
+                padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                background: selectedRepos.length === availableRepos.length ? '#111' : 'white',
+                color: selectedRepos.length === availableRepos.length ? 'white' : '#111',
+                border: '1px solid var(--color-border-bright)', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              Select All ({availableRepos.length})
+            </button>
+            <button
+              onClick={handleClearAll}
+              style={{
+                padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                background: 'white', color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {/* Repository Selection Chips */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {availableRepos.map(repoName => {
+            const isSelected = selectedRepos.includes(repoName)
+            const repoMeta = analysis.repositories?.find((r: any) => r.repo_name === repoName)
+            const lang = repoMeta?.primary_language || 'Repo'
+            const symbolCount = repoMeta?.total_symbols
+
+            return (
+              <button
+                key={repoName}
+                onClick={() => handleToggleRepo(repoName)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
-                  padding: '10px 16px', borderBottom: i < analysis.cross_repo_contracts.length - 1 ? '1px solid var(--color-border)' : 'none',
-                  fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', alignItems: 'center',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 12px',
+                  background: isSelected ? '#111' : 'var(--color-surface)',
+                  color: isSelected ? 'white' : '#111',
+                  border: isSelected ? '1px solid #111' : '1px solid var(--color-border)',
+                  borderRadius: 3, cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: 11,
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <span>{c.caller_file} : <b>{c.caller_symbol}</b></span>
-                <span style={{ color: 'var(--color-text-muted)' }}>{c.caller_repo}</span>
-                <span style={{ color: '#ea580c', fontWeight: 600 }}>{c.edge_type}</span>
-                <span style={{ color: 'var(--color-text-muted)' }}>{c.callee_repo}</span>
-                <span style={{ color: '#16a34a', fontWeight: 700 }}>`{c.callee_symbol}`</span>
+                <span style={{
+                  width: 14, height: 14, borderRadius: 2,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  border: isSelected ? '1px solid white' : '1px solid var(--color-border-bright)',
+                  background: isSelected ? 'white' : 'transparent',
+                  color: '#111', fontSize: 10, fontWeight: 700,
+                }}>
+                  {isSelected ? '✓' : ''}
+                </span>
+                <span style={{ fontWeight: isSelected ? 700 : 500 }}>{repoName}</span>
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 2,
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : 'var(--color-surface-2)',
+                  color: isSelected ? 'white' : 'var(--color-text-muted)',
+                }}>
+                  {lang}
+                </span>
+                {typeof symbolCount === 'number' && (
+                  <span style={{
+                    fontSize: 9, color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--color-text-dim)',
+                  }}>
+                    {symbolCount} syms
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Quick Correlation Pairs if >= 2 repositories */}
+        {availableRepos.length >= 2 && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--color-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)' }}>
+              Quick Pair Comparison:
+            </span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {availableRepos.slice(0, 3).map((rA, idx) => {
+                const rB = availableRepos[(idx + 1) % availableRepos.length]
+                if (rA === rB) return null
+                const isPairActive = selectedRepos.length === 2 && selectedRepos.includes(rA) && selectedRepos.includes(rB)
+                return (
+                  <button
+                    key={`${rA}-${rB}`}
+                    onClick={() => handleSelectPair(rA, rB)}
+                    style={{
+                      padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                      background: isPairActive ? '#e0e7ff' : 'var(--color-surface-2)',
+                      color: isPairActive ? '#3730a3' : '#111',
+                      border: isPairActive ? '1px solid #c7d2fe' : '1px solid var(--color-border)',
+                      borderRadius: 2, cursor: 'pointer',
+                    }}
+                  >
+                    {rA} + {rB}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Scope Status Banner */}
+        <div style={{
+          marginTop: 12, padding: '8px 12px', borderRadius: 2,
+          background: selectedRepos.length >= 2 ? '#f0fdf4' : selectedRepos.length === 1 ? '#fffbeb' : '#fef2f2',
+          border: `1px solid ${selectedRepos.length >= 2 ? '#bbf7d0' : selectedRepos.length === 1 ? '#fde68a' : '#fecaca'}`,
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          color: selectedRepos.length >= 2 ? '#166534' : selectedRepos.length === 1 ? '#92400e' : '#991b1b',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <div>
+            {selectedRepos.length >= 2 ? (
+              <span>
+                Active Correlation Focus: <b>{selectedRepos.length} of {availableRepos.length}</b> repositories selected. Cross-repo contract matrix and AI context scoped to mutual interactions.
+              </span>
+            ) : selectedRepos.length === 1 ? (
+              <span>
+                Single Repository Selected: <b>{selectedRepos[0]}</b>. Select at least 2 repositories above to reveal inter-repo contracts and dependency edges.
+              </span>
+            ) : (
+              <span>
+                No repositories selected. Please check at least one repository above to inspect context.
+              </span>
+            )}
+          </div>
+          {loading && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Updating analysis...</span>
+          )}
+        </div>
+      </div>
+
+      {selectedRepos.length === 0 ? (
+        <div style={{ padding: 48, textAlign: 'center', background: 'white', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 4 }}>
+            No Repositories Selected
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+            Select one or more repositories from the scope selector above to generate cross-repo correlation and context.
+          </div>
+          <button
+            onClick={handleSelectAll}
+            style={{
+              padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            Select All Repositories
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {[
+              { label: isFiltered ? 'SCOPED REPOSITORIES' : 'TOTAL REPOSITORIES', value: analysis.total_repositories },
+              { label: 'SOURCE FILES', value: analysis.total_files },
+              { label: 'DETERMINISTIC SYMBOLS', value: analysis.total_symbols },
+              { label: 'CROSS-REPO API CONTRACTS', value: analysis.cross_repo_contracts_count },
+            ].map(kpi => (
+              <div key={kpi.label} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, padding: '14px 16px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: '#111' }}>{kpi.value}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 4 }}>{kpi.label}</div>
               </div>
             ))}
           </div>
-        ) : (
-          <div style={{ padding: 24, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
-            No cross-repository dependencies detected yet. Ingest multiple interacting repositories to see contracts.
-          </div>
-        )}
-      </div>
 
-      {/* Raw AI Context Preview */}
-      <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
-            RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS • 98.2% SAVINGS)
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#16a34a', fontWeight: 600 }}>
-            READY FOR CURSOR / WINDSURF / CLAUDE CODE
-          </span>
-        </div>
-        <textarea
-          readOnly
-          value={ai_context}
-          style={{
-            width: '100%', height: 320, padding: 16, border: 'none', outline: 'none',
-            fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5, background: '#0D1117', color: '#E6EDF3',
-            resize: 'vertical',
-          }}
-        />
-      </div>
+          {/* Cross-Repo API Contract Matrix Table */}
+          <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+                INTER-REPOSITORY API CONTRACT MATRIX ({analysis.cross_repo_contracts_count} DETECTED)
+              </span>
+              {isFiltered && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#2563eb', fontWeight: 600 }}>
+                  Scoped to: {selectedRepos.join(', ')}
+                </span>
+              )}
+            </div>
+            {analysis.cross_repo_contracts && analysis.cross_repo_contracts.length > 0 ? (
+              <div>
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
+                  padding: '8px 16px', background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)',
+                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', fontWeight: 600,
+                }}>
+                  <span>CONSUMER FILE & SYMBOL</span>
+                  <span>CONSUMER REPO</span>
+                  <span>RELATIONSHIP</span>
+                  <span>PRODUCER REPO</span>
+                  <span>ENDPOINT SYMBOL</span>
+                </div>
+                {analysis.cross_repo_contracts.map((c: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 2fr 1.5fr',
+                      padding: '10px 16px', borderBottom: i < analysis.cross_repo_contracts.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', alignItems: 'center',
+                    }}
+                  >
+                    <span>{c.caller_file} : <b>{c.caller_symbol}</b></span>
+                    <span style={{
+                      padding: '2px 6px', background: '#eff6ff', color: '#1e40af',
+                      borderRadius: 2, fontSize: 10, fontWeight: 600, width: 'fit-content',
+                    }}>
+                      {c.caller_repo}
+                    </span>
+                    <span style={{ color: '#ea580c', fontWeight: 600 }}>
+                      {c.edge_type}{c.route ? ` [${c.http_method} ${c.route}]` : ''}
+                    </span>
+                    <span style={{
+                      padding: '2px 6px', background: '#f0fdf4', color: '#166534',
+                      borderRadius: 2, fontSize: 10, fontWeight: 600, width: 'fit-content',
+                    }}>
+                      {c.callee_repo}
+                    </span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>`{c.callee_symbol}`</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: 24, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                {selectedRepos.length < 2
+                  ? 'Select at least 2 repositories to analyze mutual cross-repo API contracts and dependencies.'
+                  : `No direct cross-repository contracts detected between the selected repositories (${selectedRepos.join(', ')}). They operate as decoupled modules.`}
+              </div>
+            )}
+          </div>
+
+          {/* Raw AI Context Preview */}
+          <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111', letterSpacing: 0.5 }}>
+                RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS {isFiltered ? '• TARGETED REPO SCOPE' : '• FULL ORG'})
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#16a34a', fontWeight: 600 }}>
+                READY FOR CURSOR / WINDSURF / CLAUDE CODE
+              </span>
+            </div>
+            <textarea
+              readOnly
+              value={ai_context}
+              style={{
+                width: '100%', height: 320, padding: 16, border: 'none', outline: 'none',
+                fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5, background: '#0D1117', color: '#E6EDF3',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -2125,22 +2367,35 @@ function CodeExplorerView({ repos }: { repos: string[] }) {
 
 // ── Ingestion Modal (Supports Any Org Link or Custom URLs) ─────────────────────
 
+// ── Ingestion Modal (Ingests All Org Repositories with Full Summary) ──────────
+
+interface IngestSummaryData {
+  org: string
+  repositories: string[]
+  indexed_nodes: number
+  cross_repo_edges: number
+  internal_edges: number
+  errors: string[]
+}
+
 function IngestModal({
   open,
   onClose,
   onIngestSuccess,
+  onNavigateToBlueprint,
 }: {
   open: boolean
   onClose: () => void
   onIngestSuccess: () => void
+  onNavigateToBlueprint?: () => void
 }) {
   const [mode, setMode] = useState<'org' | 'custom'>('org')
   const [orgInput, setOrgInput] = useState('')
   const [customUrls, setCustomUrls] = useState('')
-  const [maxRepos, setMaxRepos] = useState(5)
   const [wipeExisting, setWipeExisting] = useState(true)
   const [loading, setLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+  const [ingestSummary, setIngestSummary] = useState<IngestSummaryData | null>(null)
 
   if (!open) return null
 
@@ -2168,8 +2423,9 @@ function IngestModal({
           setLoading(false)
           return
         }
-        targetUrls = discData.repositories.slice(0, maxRepos)
-        setStatusMsg(`Found ${discData.repositories.length} repos. Ingesting top ${targetUrls.length}...`)
+        // Ingest ALL discovered repositories without numeric limitation
+        targetUrls = discData.repositories
+        setStatusMsg(`Discovered all ${targetUrls.length} repositories for '${orgInput}'. Ingesting and indexing AST boundaries...`)
       } catch (e: any) {
         setStatusMsg(`Discovery failed: ${e.message}`)
         setLoading(false)
@@ -2185,7 +2441,7 @@ function IngestModal({
     }
 
     try {
-      setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into AST graph...`)
+      setStatusMsg(`Cloning & indexing all ${targetUrls.length} repositories into deterministic AST graph...`)
       const res = await fetch('http://localhost:8000/api/repos/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2193,12 +2449,21 @@ function IngestModal({
       })
       const data = await res.json()
       if (data.status === 'success') {
-        setStatusMsg(`Successfully indexed ${data.indexed_nodes} symbols across ${data.repositories.length} repos!`)
-        setTimeout(() => {
-          setLoading(false)
-          onIngestSuccess()
-          onClose()
-        }, 1200)
+        const repoList = data.repositories && data.repositories.length > 0
+          ? data.repositories
+          : targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
+
+        setIngestSummary({
+          org: orgInput.trim() || 'Custom Repository Set',
+          repositories: repoList,
+          indexed_nodes: data.indexed_nodes || 0,
+          cross_repo_edges: data.cross_repo_edges || 0,
+          internal_edges: data.internal_edges || 0,
+          errors: data.errors || [],
+        })
+        setLoading(false)
+        setStatusMsg('')
+        onIngestSuccess()
       } else {
         setStatusMsg(`Ingestion failed: ${data.errors ? data.errors.join(', ') : 'Unknown error'}`)
         setLoading(false)
@@ -2209,127 +2474,223 @@ function IngestModal({
     }
   }
 
+  const handleCloseModal = () => {
+    setIngestSummary(null)
+    setStatusMsg('')
+    onClose()
+  }
+
+  const handleGoToBlueprint = () => {
+    setIngestSummary(null)
+    setStatusMsg('')
+    onClose()
+    if (onNavigateToBlueprint) {
+      onNavigateToBlueprint()
+    }
+  }
+
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
+      <div onClick={handleCloseModal} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 60 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: 500, background: 'white', border: '1px solid var(--color-border)',
+        width: ingestSummary ? 560 : 500, background: 'white', border: '1px solid var(--color-border)',
         borderRadius: 4, zIndex: 70, boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
-        display: 'flex', flexDirection: 'column',
+        display: 'flex', flexDirection: 'column', maxHeight: '90vh',
       }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111' }}>
-            Ingest Dynamic GitHub Codebase
+            {ingestSummary ? 'Codebase Ingestion & Indexing Summary' : 'Ingest Dynamic GitHub Codebase'}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer' }}>✕</button>
+          <button onClick={handleCloseModal} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer' }}>✕</button>
         </div>
 
-        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Mode Selector */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[
-              { id: 'org', label: 'GitHub Organization (Auto-discover)' },
-              { id: 'custom', label: 'Custom Repo URLs' },
-            ].map(m => (
-              <button
-                key={m.id}
-                onClick={() => setMode(m.id as any)}
-                style={{
-                  flex: 1, padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: mode === m.id ? '#111' : 'var(--color-surface)',
-                  color: mode === m.id ? 'white' : 'var(--color-text-muted)',
-                  border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+        {ingestSummary ? (
+          /* Ingestion Summary Report View */
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
+            <div style={{
+              padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 11, color: '#166534',
+            }}>
+              Successfully ingested all <b>{ingestSummary.repositories.length}</b> repositories from {ingestSummary.org}.
+            </div>
 
-          {mode === 'org' ? (
+            {/* KPI Metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {[
+                { label: 'REPOSITORIES', value: ingestSummary.repositories.length },
+                { label: 'AST SYMBOLS', value: ingestSummary.indexed_nodes },
+                { label: 'CROSS CONTRACTS', value: ingestSummary.cross_repo_edges },
+                { label: 'INTERNAL EDGES', value: ingestSummary.internal_edges },
+              ].map(k => (
+                <div key={k.label} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '8px 10px', borderRadius: 2 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: '#111' }}>{k.value}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--color-text-dim)', letterSpacing: 0.5, marginTop: 2 }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Ingested Repositories List */}
             <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
-                GITHUB ORGANIZATION NAME OR URL
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, letterSpacing: 0.5, marginBottom: 6 }}>
+                INGESTED REPOSITORIES ({ingestSummary.repositories.length})
               </div>
-              <input
-                value={orgInput}
-                onChange={e => setOrgInput(e.target.value)}
-                placeholder="e.g. pallets, meshery, fastapi, or https://github.com/orgs/pallets/repositories"
-                style={{
-                  width: '100%', padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
-                  Max repositories to index:
-                </span>
+              <div style={{
+                maxHeight: 180, overflowY: 'auto', border: '1px solid var(--color-border)',
+                borderRadius: 2, background: 'var(--color-surface-2)',
+              }}>
+                {ingestSummary.repositories.map((repo, i) => (
+                  <div
+                    key={repo}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '6px 12px', borderBottom: i < ingestSummary.repositories.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{repo}</span>
+                    <span style={{
+                      fontSize: 9, padding: '1px 6px', background: '#dcfce7',
+                      color: '#15803d', borderRadius: 2, fontWeight: 600,
+                    }}>
+                      Indexed AST & Symbols
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {ingestSummary.errors && ingestSummary.errors.length > 0 && (
+              <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10, color: '#991b1b' }}>
+                <div style={{ fontWeight: 700, marginBottom: 2 }}>Clone Warnings:</div>
+                {ingestSummary.errors.map((err, i) => <div key={i}>• {err}</div>)}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Ingestion Input Form */
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Mode Selector */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[
+                { id: 'org', label: 'GitHub Organization (Ingest All)' },
+                { id: 'custom', label: 'Custom Repo URLs' },
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id as any)}
+                  style={{
+                    flex: 1, padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    background: mode === m.id ? '#111' : 'var(--color-surface)',
+                    color: mode === m.id ? 'white' : 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'org' ? (
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                  GITHUB ORGANIZATION NAME OR URL
+                </div>
                 <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={maxRepos}
-                  onChange={e => setMaxRepos(parseInt(e.target.value) || 5)}
-                  style={{ width: 60, padding: '3px 6px', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                  value={orgInput}
+                  onChange={e => setOrgInput(e.target.value)}
+                  placeholder="e.g. pallets, meshery, fastapi, tiangolo, or https://github.com/orgs/pallets/repositories"
+                  style={{
+                    width: '100%', padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                  }}
+                />
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                  All public repositories in this organization will be discovered and ingested into the knowledge graph without limits.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
+                  REPOSITORY URLS (one per line)
+                </div>
+                <textarea
+                  value={customUrls}
+                  onChange={e => setCustomUrls(e.target.value)}
+                  placeholder="https://github.com/fastapi/fastapi&#10;https://github.com/encode/starlette"
+                  style={{
+                    width: '100%', height: 100, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                    border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                  }}
                 />
               </div>
-            </div>
-          ) : (
-            <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600, marginBottom: 4 }}>
-                REPOSITORY URLS (one per line)
+            )}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={wipeExisting} onChange={e => setWipeExisting(e.target.checked)} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
+                Wipe existing graph & replace
+              </span>
+            </label>
+
+            {statusMsg && (
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 10px',
+                background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                borderRadius: 2, color: '#111',
+              }}>
+                {statusMsg}
               </div>
-              <textarea
-                value={customUrls}
-                onChange={e => setCustomUrls(e.target.value)}
-                placeholder="https://github.com/fastapi/fastapi&#10;https://github.com/encode/starlette"
-                style={{
-                  width: '100%', height: 100, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
-                }}
-              />
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={wipeExisting} onChange={e => setWipeExisting(e.target.checked)} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
-              Wipe existing graph & replace
-            </span>
-          </label>
-
-          {statusMsg && (
-            <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 10px',
-              background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-              borderRadius: 2, color: '#111',
-            }}>
-              {statusMsg}
-            </div>
-          )}
-        </div>
-
+        {/* Footer Actions */}
         <div style={{ padding: '12px 18px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleStartIngest}
-            disabled={loading}
-            style={{
-              padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-              background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600,
-            }}
-          >
-            {loading ? 'Ingesting...' : 'Start Ingestion'}
-          </button>
+          {ingestSummary ? (
+            <>
+              <button
+                onClick={handleCloseModal}
+                style={{
+                  padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                }}
+              >
+                Close & View Graph
+              </button>
+              <button
+                onClick={handleGoToBlueprint}
+                style={{
+                  padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                Select Repos for Correlation & Context →
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleCloseModal}
+                style={{
+                  padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStartIngest}
+                disabled={loading}
+                style={{
+                  padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                  background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600,
+                }}
+              >
+                {loading ? 'Ingesting All Repositories...' : 'Start Ingestion'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -2878,6 +3239,10 @@ export default function App() {
         open={ingestModalOpen}
         onClose={() => setIngestModalOpen(false)}
         onIngestSuccess={loadData}
+        onNavigateToBlueprint={() => {
+          loadData()
+          setTab('blueprint')
+        }}
       />
 
       {/* Engine Settings Drawer */}

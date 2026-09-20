@@ -124,6 +124,9 @@ class CodeGraphToolManager:
     def semantic_code_search(self, query: str, repo: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
         """Performs natural language to code search using dense embeddings (Titan v2 / Local)."""
         nodes = self.vector_store.search_semantic(query, repo=repo, limit=limit)
+        if not nodes:
+            # Fallback to SQLite full-text search
+            nodes = self.graph_store.search_nodes_lexical(query, repo=repo, limit=limit)
         return {
             "query": query,
             "count": len(nodes),
