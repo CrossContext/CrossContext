@@ -25,6 +25,9 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from dotenv import load_dotenv
+load_dotenv(PROJECT_ROOT / ".env", override=True)
+
 from common.models import SymbolType, EdgeType
 from agent_orchestrator.bedrock_client import BedrockClient
 from agent_orchestrator.agent import CrossContextAgent
