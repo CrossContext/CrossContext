@@ -1,3 +1,3 @@
 """
-OmniContext Parsing Engine (Tree-sitter & SCIP)
+CrossContext Parsing Engine (Tree-sitter & SCIP)
 """

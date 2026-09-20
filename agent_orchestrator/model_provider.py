@@ -1,5 +1,5 @@
 """
-OmniContext - Model Provider Adapter
+CrossContext - Model Provider Adapter
 Supports:
 1. Amazon Bedrock (Anthropic Claude 3.5 Sonnet / Claude 3.7 Sonnet)
 2. Local Deterministic LLM Simulator (Zero-AWS offline execution)

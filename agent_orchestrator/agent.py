@@ -236,6 +236,3 @@ class CrossContextAgent:
         }
 
 
-# Backward-compatibility alias
-OmniContextAgent = CrossContextAgent
-

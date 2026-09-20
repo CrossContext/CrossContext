@@ -1,3 +1,3 @@
 """
-OmniContext Multi-Repo Testbed Package
+CrossContext Multi-Repo Testbed Package
 """

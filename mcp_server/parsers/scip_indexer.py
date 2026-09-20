@@ -1,4 +1,4 @@
-"""OmniContext - Cross-Repository Linker (SCIP / Semantic API Resolver).
+"""CrossContext - Cross-Repository Linker (SCIP / Semantic API Resolver).
 
 Bridges distributed multi-repo boundaries by resolving:
 1. HTTP API Endpoint definitions (FastAPI / Flask / Spring / Gin / Express) to API consumers (fetch / axios / requests / httpx / Go http), with full support for parameterized path variables (/users/{id} vs /users/123).
@@ -60,7 +60,7 @@ class CrossRepoLinker:
             if re.search(pattern, clean_imp, re.IGNORECASE):
                 # Ensure the statement is not actually just importing a 3rd-party library
                 parts = [p.lower() for p in re.split(r'[\s./\'"`]', clean_imp) if p]
-                if len(parts) > 1 and parts[0] in ("from", "import"):
+                if len(parts) > 1 and parts[0] in ("from", "import", "use", "using", "require", "include", "open"):
                     root_mod = parts[1]
                     if root_mod in COMMON_THIRD_PARTY_PACKAGES and root_mod != r_name.lower():
                         continue

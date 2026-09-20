@@ -1,5 +1,5 @@
 """
-OmniContext Common Data Contracts
+CrossContext Common Data Contracts
 """
 from .models import (
     SymbolType,

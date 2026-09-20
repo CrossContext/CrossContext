@@ -1,5 +1,5 @@
 """
-OmniContext - Dynamic GitHub Repository Ingester
+CrossContext - Dynamic GitHub Repository Ingester
 Clones and indexes real-world multi-repository codebases from GitHub or local paths.
 Parses AST boundaries, discovers cross-repo dependencies, and registers symbols in the knowledge graph.
 """
@@ -75,30 +75,41 @@ class GitHubRepoIngester:
             except Exception:
                 pass
 
-        # 1. Official GitHub REST API
-        api_urls = [
-            f"https://api.github.com/orgs/{clean_org}/repos?per_page=100&sort=pushed",
-            f"https://api.github.com/users/{clean_org}/repos?per_page=100&sort=pushed"
-        ]
-        for api_url in api_urls:
-            try:
-                req = urllib.request.Request(api_url)
-                req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
-                if token:
-                    req.add_header("Authorization", f"Bearer {token}")
-                with urllib.request.urlopen(req, timeout=6) as resp:
-                    if resp.status == 200:
-                        data = json.loads(resp.read().decode("utf-8"))
-                        if isinstance(data, list) and data:
-                            return [r["clone_url"] for r in data if "clone_url" in r]
-            except Exception:
-                continue
+        # 1. Official GitHub REST API with pagination
+        discovered_urls: List[str] = []
+        for entity_type in ("orgs", "users"):
+            page = 1
+            while page <= 10:  # Fetch up to 1,000 repositories per organization
+                api_url = f"https://api.github.com/{entity_type}/{clean_org}/repos?per_page=100&sort=pushed&page={page}"
+                try:
+                    req = urllib.request.Request(api_url)
+                    req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+                    if token:
+                        req.add_header("Authorization", f"Bearer {token}")
+                    with urllib.request.urlopen(req, timeout=8) as resp:
+                        if resp.status == 200:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            if isinstance(data, list) and data:
+                                for r in data:
+                                    if "clone_url" in r and r["clone_url"] not in discovered_urls:
+                                        discovered_urls.append(r["clone_url"])
+                                if len(data) < 100:
+                                    break  # Reached last page
+                                page += 1
+                            else:
+                                break
+                        else:
+                            break
+                except Exception:
+                    break
 
-        # 2. Resilient Fallback: Scrape public repositories via urllib
-        page_urls = [
-            f"https://github.com/orgs/{clean_org}/repositories",
-            f"https://github.com/{clean_org}?tab=repositories",
-            f"https://github.com/{clean_org}"
+            if discovered_urls:
+                return discovered_urls
+
+        # 2. Resilient Fallback: Scrape public repositories across pages
+        page_templates = [
+            f"https://github.com/orgs/{clean_org}/repositories?page={{page}}",
+            f"https://github.com/{clean_org}?tab=repositories&page={{page}}"
         ]
         ignored_names = {
             "repositories", "people", "packages", "sponsoring", "projects",
@@ -106,22 +117,28 @@ class GitHubRepoIngester:
             "discussions", "security", "settings", "insights"
         }
 
-        for p_url in page_urls:
-            try:
-                req = urllib.request.Request(p_url)
-                req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    html = resp.read().decode("utf-8", errors="ignore")
-                    matches = re.findall(rf'href=[\"\']/{clean_org}/([^/\#\?\"\'\s]+)[\"\']', html, re.IGNORECASE)
-                    seen = []
-                    for m in matches:
-                        m_clean = m.strip()
-                        if m_clean.lower() not in ignored_names and not m_clean.startswith(".") and m_clean not in seen:
-                            seen.append(m_clean)
-                    if seen:
-                        return [f"https://github.com/{clean_org}/{r}.git" for r in seen]
-            except Exception:
-                continue
+        seen = []
+        for p_template in page_templates:
+            for page in range(1, 6):  # Check up to 5 pages (150 repos)
+                try:
+                    p_url = p_template.format(page=page)
+                    req = urllib.request.Request(p_url)
+                    req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        html = resp.read().decode("utf-8", errors="ignore")
+                        matches = re.findall(rf'href=[\"\']/{clean_org}/([^/\#\?\"\'\s]+)[\"\']', html, re.IGNORECASE)
+                        page_found = 0
+                        for m in matches:
+                            m_clean = m.strip()
+                            if m_clean.lower() not in ignored_names and (not m_clean.startswith(".") or m_clean == ".github") and m_clean not in seen:
+                                seen.append(m_clean)
+                                page_found += 1
+                        if page_found == 0:
+                            break  # No more repositories found on next page
+                except Exception:
+                    break
+            if seen:
+                return [f"https://github.com/{clean_org}/{r}.git" for r in seen]
 
         return []
 

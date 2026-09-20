@@ -1,5 +1,5 @@
 """
-OmniContext - AWS Bedrock & Amazon Titan Client Adapter
+CrossContext - AWS Bedrock & Amazon Titan Client Adapter
 Provides enterprise connectivity to Anthropic Claude 3.7 / 3.5 Sonnet on Amazon Bedrock
 and Amazon Titan Text Embeddings v2 with streaming and automatic fallback.
 """

@@ -1,3 +1,3 @@
 """
-OmniContext Test Suite
+CrossContext Test Suite
 """

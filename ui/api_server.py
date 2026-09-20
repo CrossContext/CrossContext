@@ -339,11 +339,11 @@ def get_benchmarks():
             "latency_ms": round(res2.execution_time_ms, 2),
         },
         "summary_table": [
-            {"metric": "Cross-Repo Recall", "rag": "0%", "omni": "100%", "delta": "+100%"},
-            {"metric": "Context Tokens", "rag": f"{res1.metrics.get('naive_rag_tokens_estimate', 14500):,}", "omni": f"{res1.metrics.get('crosscontext_tokens', 120):,}", "delta": f"{res1.metrics.get('token_reduction_pct', 97.6)}% reduction"},
-            {"metric": "Hallucinated File Paths", "rag": "42%", "omni": "0%", "delta": "Zero"},
-            {"metric": "Blast Radius Detection", "rag": "Failed", "omni": "Complete", "delta": "Zero breakage"},
-            {"metric": "Retrieval Latency", "rag": "3,400 ms", "omni": f"{round(res1.execution_time_ms / max(res1.metrics.get('tests_total', 1), 1), 2)} ms", "delta": "High Speed"},
+            {"metric": "Cross-Repo Recall", "rag": "0%", "crosscontext": "100%", "delta": "+100%"},
+            {"metric": "Context Tokens", "rag": f"{res1.metrics.get('naive_rag_tokens_estimate', 14500):,}", "crosscontext": f"{res1.metrics.get('crosscontext_tokens', 120):,}", "delta": f"{res1.metrics.get('token_reduction_pct', 97.6)}% reduction"},
+            {"metric": "Hallucinated File Paths", "rag": "42%", "crosscontext": "0%", "delta": "Zero"},
+            {"metric": "Blast Radius Detection", "rag": "Failed", "crosscontext": "Complete", "delta": "Zero breakage"},
+            {"metric": "Retrieval Latency", "rag": "3,400 ms", "crosscontext": f"{round(res1.execution_time_ms / max(res1.metrics.get('tests_total', 1), 1), 2)} ms", "delta": "High Speed"},
         ]
     }
 
