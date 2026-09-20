@@ -1,3 +1,3 @@
 """
-OmniContext Quantitative Evaluation Package (RepoQA & CodeScaleBench)
+CrossContext Quantitative Evaluation Package (RepoQA & CodeScaleBench)
 """

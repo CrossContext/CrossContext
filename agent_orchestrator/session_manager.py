@@ -1,5 +1,5 @@
 """
-OmniContext - Multi-Turn Session Manager
+CrossContext - Multi-Turn Session Manager
 Provides stateful conversation history with sliding window truncation
 and context summarization for the autonomous agent loop.
 """

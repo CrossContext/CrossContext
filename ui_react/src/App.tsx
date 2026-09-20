@@ -3086,7 +3086,7 @@ function EngineSettingsSidebar({
           ))}
 
           {/* 5. Cycle Detection Guardrail */}
-          {field('Cycle Guardrails', 'Tripwire blocking infinite recursive graph loops', (
+          {field('Cycle Guardrails', 'Circuit breaker blocking infinite recursive graph loops', (
             <div
               onClick={() => setLocalCfg(c => ({ ...c, cycleDetection: !c.cycleDetection }))}
               style={{
@@ -3096,7 +3096,7 @@ function EngineSettingsSidebar({
               }}
             >
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111' }}>
-                Infinite loop tripwire
+                Infinite loop circuit breaker
               </span>
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10,

@@ -1,5 +1,5 @@
 """
-OmniContext - Amazon OpenSearch Serverless (AOSS) Vector Store Adapter
+CrossContext - Amazon OpenSearch Serverless (AOSS) Vector Store Adapter
 Manages high-performance k-NN vector embeddings and hybrid AST retrieval on AWS.
 """
 
@@ -12,7 +12,7 @@ from common.models import CodeNode, SymbolType
 class OpenSearchVectorStore:
     """Manages vector embeddings and hybrid search on Amazon OpenSearch Serverless."""
 
-    INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "omnicontext-symbols-v1")
+    INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "crosscontext-symbols-v1")
 
     def __init__(
         self,

@@ -1,5 +1,5 @@
 """
-OmniContext - Agent Orchestration Loop Tests
+CrossContext - Agent Orchestration Loop Tests
 Verifies end-to-end multi-turn reasoning, guardrail enforcement, and telemetry.
 """
 
@@ -13,15 +13,15 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agent_orchestrator.agent import OmniContextAgent
+from agent_orchestrator.agent import CrossContextAgent
 from agent_orchestrator.hooks import LifecycleGuardrails
 from mcp_server.parsers.treesitter_engine import TreeSitterEngine
 from mcp_server.parsers.scip_indexer import CrossRepoLinker
 
 
-def _create_seeded_agent() -> OmniContextAgent:
+def _create_seeded_agent() -> CrossContextAgent:
     """Creates an agent with the testbed repositories pre-indexed."""
-    agent = OmniContextAgent(":memory:")
+    agent = CrossContextAgent(":memory:")
     backend_dir = str(PROJECT_ROOT / "testbed" / "repo_auth_core")
     frontend_dir = str(PROJECT_ROOT / "testbed" / "repo_frontend_portal")
 

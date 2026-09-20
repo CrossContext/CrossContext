@@ -1,5 +1,5 @@
 """
-OmniContext - MCP Server Tool Implementations
+CrossContext - MCP Server Tool Implementations
 Exposes deterministic semantic code graph querying tools to the Strands Agent via Model Context Protocol.
 """
 
@@ -13,7 +13,7 @@ from mcp_server.parsers.scip_indexer import CrossRepoLinker
 
 class CodeGraphToolManager:
     """Manages graph store and tool dispatch for the MCP server."""
-    def __init__(self, db_path: str = "data/omnicontext_graph.db"):
+    def __init__(self, db_path: str = "data/crosscontext_graph.db"):
         self.graph_store = SQLiteGraphStore(db_path)
         self.vector_store = DualModeVectorStore()
         self.parser = TreeSitterEngine()

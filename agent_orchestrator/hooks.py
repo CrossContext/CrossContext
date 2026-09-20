@@ -1,5 +1,5 @@
 """
-OmniContext - Agent Lifecycle Guardrails & Safety Hooks
+CrossContext - Agent Lifecycle Guardrails & Safety Hooks
 Protects context window against infinite recursion, cycle traps, and token bloat.
 Enforces hard limits on tool call count, token budget, and blast-radius scope.
 """
