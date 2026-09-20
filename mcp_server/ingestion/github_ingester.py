@@ -60,7 +60,17 @@ class GitHubRepoIngester:
             return []
 
         import json
+        import ssl
         import urllib.request
+
+        try:
+            import certifi
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            try:
+                ssl_ctx = ssl.create_default_context()
+            except Exception:
+                ssl_ctx = ssl._create_unverified_context()
 
         token = os.environ.get("GITHUB_TOKEN")
         if not token and os.path.exists(".env"):
@@ -86,7 +96,7 @@ class GitHubRepoIngester:
                 req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
                 if token:
                     req.add_header("Authorization", f"Bearer {token}")
-                with urllib.request.urlopen(req, timeout=6) as resp:
+                with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode("utf-8"))
                         if isinstance(data, list) and data:
@@ -110,7 +120,7 @@ class GitHubRepoIngester:
             try:
                 req = urllib.request.Request(p_url)
                 req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
                     html = resp.read().decode("utf-8", errors="ignore")
                     matches = re.findall(rf'href=[\"\']/{clean_org}/([^/\#\?\"\'\s]+)[\"\']', html, re.IGNORECASE)
                     seen = []
