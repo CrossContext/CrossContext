@@ -330,8 +330,6 @@ class GitHubRepoIngester:
             "indexed_nodes": index_stats["indexed_nodes"],
             "internal_edges": index_stats.get("internal_edges", 0),
             "cross_repo_edges": index_stats.get("cross_repo_edges", 0),
-            "nodes": index_stats.get("nodes", []),
-            "edges": index_stats.get("edges", []),
             "clone_results": clone_results,
             "errors": errors
         }

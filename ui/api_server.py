@@ -327,11 +327,14 @@ def ingest_status():
     """Returns the current status of the background ingestion job."""
     headers = {"Cache-Control": "no-cache, no-store, must-revalidate"}
     if _ingest_state["result"]:
+        res_data = dict(_ingest_state["result"])
+        res_data.pop("nodes", None)
+        res_data.pop("edges", None)
         return JSONResponse(content={
             "running": _ingest_state["running"],
             "progress": _ingest_state["progress"],
             "complete": True,
-            **_ingest_state["result"],
+            **res_data,
         }, headers=headers)
     if _ingest_state["error"]:
         return JSONResponse(content={
@@ -339,7 +342,7 @@ def ingest_status():
             "progress": _ingest_state["progress"],
             "complete": True,
             "status": "error",
-            "error": _ingest_state["error"],
+            "error": str(_ingest_state["error"]),
         }, headers=headers)
     return JSONResponse(content={
         "running": _ingest_state["running"],
