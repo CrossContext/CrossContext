@@ -1,0 +1,17 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd ui_react
+        - npm install
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: ui_react/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - ui_react/node_modules/**/*

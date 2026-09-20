@@ -81,6 +81,10 @@ class IngestRequest(BaseModel):
     clear_existing: bool = True
 
 
+class DiscoverOrgRequest(BaseModel):
+    org: str
+
+
 # --- API Routes ---
 
 @app.get("/api/aws/status")

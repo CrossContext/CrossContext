@@ -102,11 +102,12 @@ const DEFAULT_ENGINE: EngineConfig = {
   indexStrategy: 'ast',
   cycleDetection: true,
 }
-
 const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
   if (typeof window !== 'undefined') {
     const host = window.location.hostname || '127.0.0.1'
-    return `http://${host}:8000`
+    if (host === 'localhost' || host === '127.0.0.1') return `http://${host}:8000`
+    return ''
   }
   return 'http://127.0.0.1:8000'
 }
