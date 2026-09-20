@@ -2591,22 +2591,6 @@ function BenchmarksView({
             >
               + Ingest Repositories
             </button>
-            <button
-              onClick={() => onOpenIngest?.('meshery')}
-              style={{
-                padding: '8px 16px',
-                fontSize: 11,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 600,
-                background: 'var(--color-blue-dim)',
-                color: 'var(--color-blue)',
-                border: '1px solid var(--color-border-bright)',
-                borderRadius: 3,
-                cursor: 'pointer',
-              }}
-            >
-              Try meshery
-            </button>
           </div>
 
           <div style={{
@@ -2967,7 +2951,8 @@ function OrgBlueprintView({
   onOpenIngest?: (org?: string) => void
 }) {
   const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const hasIndexedRepos = Boolean(stats?.repositories && stats.repositories.length > 0)
+  const [loading, setLoading] = useState(hasIndexedRepos)
   const [copied, setCopied] = useState(false)
   const [selectedRepos, setSelectedRepos] = useState<string[]>([])
   const [availableRepos, setAvailableRepos] = useState<string[]>([])
@@ -2998,8 +2983,12 @@ function OrgBlueprintView({
   }, [])
 
   useEffect(() => {
+    if (!stats || !stats.repositories || stats.repositories.length === 0) {
+      setLoading(false)
+      return
+    }
     loadBlueprint()
-  }, [dataVersion, loadBlueprint])
+  }, [dataVersion, loadBlueprint, stats])
 
   const handleToggleRepo = (repoName: string) => {
     const next = selectedRepos.includes(repoName)
@@ -3026,7 +3015,7 @@ function OrgBlueprintView({
     loadBlueprint(pair)
   }
 
-  const isOrgEmpty = (!stats || !stats.repositories || stats.repositories.length === 0) || (data?.analysis?.total_repositories === 0)
+  const isOrgEmpty = (!stats || !stats.repositories || stats.repositories.length === 0) || (!loading && (!data || data?.analysis?.total_repositories === 0))
 
   if (isOrgEmpty && !loading) {
     return (
@@ -3051,7 +3040,7 @@ function OrgBlueprintView({
           letterSpacing: 1,
           textTransform: 'uppercase',
         }}>
-          Federated Architecture Blueprint
+          Architecture Blueprint
         </div>
         <h3 style={{
           margin: 0,
@@ -3070,7 +3059,7 @@ function OrgBlueprintView({
           lineHeight: 1.6,
           fontFamily: 'var(--font-mono)',
         }}>
-          The Organization Blueprint automatically generates federated architecture topology, API blast radius summaries, and cross-repo context for AI agents. Ingest any multi-repository organization to view its architecture blueprint.
+          The Architecture Blueprint automatically generates federated architecture topology, API blast radius summaries, and cross-repo context for AI agents. Ingest any set of repositories or services to view their architecture blueprint.
         </p>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -3090,22 +3079,6 @@ function OrgBlueprintView({
           >
             + Ingest Repositories
           </button>
-          <button
-            onClick={() => onOpenIngest?.('meshery')}
-            style={{
-              padding: '8px 16px',
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 600,
-              background: 'var(--color-blue-dim)',
-              color: 'var(--color-blue)',
-              border: '1px solid var(--color-border-bright)',
-              borderRadius: 3,
-              cursor: 'pointer',
-            }}
-          >
-            Try meshery
-          </button>
         </div>
       </div>
     )
@@ -3114,7 +3087,7 @@ function OrgBlueprintView({
   if (loading && !data) {
     return (
       <div style={{ padding: 40, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)' }}>
-        Loading federated organization architecture blueprint...
+        Loading architecture blueprint...
       </div>
     )
   }
@@ -3122,7 +3095,7 @@ function OrgBlueprintView({
   if (!data || !data.analysis) {
     return (
       <div style={{ padding: 40, fontFamily: 'var(--font-mono)', fontSize: 12, color: '#ef4444' }}>
-        Failed to load organization blueprint.
+        Failed to load architecture blueprint.
       </div>
     )
   }
@@ -3151,7 +3124,7 @@ function OrgBlueprintView({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}>
-            Federated Organization Architecture Blueprint
+            Architecture Blueprint
           </h2>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
             Automated architectural synthesis of all indexed repositories, cross-repo API contracts, and an ultra-compressed AI prompt for external IDEs.
@@ -3433,7 +3406,7 @@ function OrgBlueprintView({
           <div style={{ background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--color-text)', letterSpacing: 0.5 }}>
-                RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS {isFiltered ? '• TARGETED REPO SCOPE' : '• FULL ORG'})
+                RAW AI-OPTIMIZED BLUEPRINT FOR IDES (~{approx_tokens} TOKENS {isFiltered ? '• TARGETED REPO SCOPE' : '• FULL SYSTEM SCOPE'})
               </span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-green)', fontWeight: 600 }}>
                 READY FOR CURSOR / WINDSURF / CLAUDE CODE
@@ -4793,7 +4766,7 @@ export default function App() {
         <nav style={{ display: 'flex', gap: 0 }}>
           {([
             { id: 'agent', label: 'Agent Task & Graph' },
-            { id: 'blueprint', label: 'Org Blueprint' },
+            { id: 'blueprint', label: 'Architecture Blueprint' },
             { id: 'explorer', label: 'Code Explorer' },
             { id: 'benchmarks', label: 'Benchmarks' },
           ] as const).map(item => (
