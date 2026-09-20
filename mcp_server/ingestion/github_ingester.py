@@ -300,8 +300,8 @@ class GitHubRepoIngester:
                 "edges": []
             }
 
-        # Parallel cloning with ThreadPoolExecutor (up to 8 concurrent workers)
-        max_workers = min(total_repos, 8)
+        # Parallel cloning with ThreadPoolExecutor (up to 16 concurrent workers)
+        max_workers = min(total_repos, 16)
         completed_clones = 0
 
         if progress_cb:

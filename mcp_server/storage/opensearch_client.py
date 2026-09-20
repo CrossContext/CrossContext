@@ -38,27 +38,33 @@ class TitanEmbeddingClient:
             else:
                 self._bedrock_available = None  # Reset circuit breaker
 
-        try:
-            client = self._get_client()
-            payload = {
-                "inputText": text[:8192],  # Titan v2 input limit
-                "dimensions": dimensions,
-                "normalize": True
-            }
-            response = client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(payload)
-            )
-            body = json.loads(response["body"].read())
-            self._bedrock_available = True
-            return body["embedding"]
-        except Exception:
-            # Trip circuit breaker on failure to prevent 3000+ sequential HTTP timeouts
-            self._bedrock_available = False
-            self._last_error_time = time.time()
-            return self._fallback_pseudo_embedding(text, dimensions)
+        for attempt in range(3):
+            try:
+                client = self._get_client()
+                payload = {
+                    "inputText": text[:8192],  # Titan v2 input limit
+                    "dimensions": dimensions,
+                    "normalize": True
+                }
+                response = client.invoke_model(
+                    modelId=self.model_id,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(payload)
+                )
+                body = json.loads(response["body"].read())
+                self._bedrock_available = True
+                return body["embedding"]
+            except Exception as e:
+                err_str = str(e).lower()
+                if "throttl" in err_str or "too many requests" in err_str or "rate limit" in err_str:
+                    time.sleep(0.15 * (2 ** attempt))
+                    continue
+                if attempt == 2:
+                    self._bedrock_available = False
+                    self._last_error_time = time.time()
+                    return self._fallback_pseudo_embedding(text, dimensions)
+        return self._fallback_pseudo_embedding(text, dimensions)
 
     @staticmethod
     def _fallback_pseudo_embedding(text: str, dimensions: int = 1024) -> List[float]:
@@ -133,7 +139,7 @@ class DualModeVectorStore:
         completed = 0
         if progress_cb:
             progress_cb("embedding", f"Generating Amazon Titan v2 embeddings (0/{total_targets})...", 0.9)
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=min(total_targets, 12)) as executor:
             futures = [executor.submit(_embed_node, n) for n in target_nodes]
             for future in as_completed(futures):
                 try:
