@@ -457,34 +457,7 @@ function CrossRepoGraph({
               </button>
             )}
 
-            {/* Canvas View Controls (Zoom, Reset) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
-              <button
-                onClick={() => zoomTo(zoom / 1.2)}
-                title="Zoom Out"
-                style={{
-                  width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
-                  fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer', color: 'var(--color-text-muted)',
-                }}
-              >
-                -
-              </button>
-              <button
-                onClick={() => zoomTo(zoom * 1.2)}
-                title="Zoom In"
-                style={{
-                  width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
-                  fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer', color: 'var(--color-text-muted)',
-                }}
-              >
-                +
-              </button>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', marginLeft: 2 }}>
-                {Math.round(zoom * 100)}%
-              </span>
-            </div>
+
 
             {/* Right Side Tools */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
