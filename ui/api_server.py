@@ -18,7 +18,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # Add project root to sys.path
@@ -325,26 +325,27 @@ async def ingest_repositories(req: IngestRequest):
 @app.get("/api/repos/ingest/status")
 def ingest_status():
     """Returns the current status of the background ingestion job."""
+    headers = {"Cache-Control": "no-cache, no-store, must-revalidate"}
     if _ingest_state["result"]:
-        return {
+        return JSONResponse(content={
             "running": _ingest_state["running"],
             "progress": _ingest_state["progress"],
             "complete": True,
             **_ingest_state["result"],
-        }
+        }, headers=headers)
     if _ingest_state["error"]:
-        return {
+        return JSONResponse(content={
             "running": False,
             "progress": _ingest_state["progress"],
             "complete": True,
             "status": "error",
             "error": _ingest_state["error"],
-        }
-    return {
+        }, headers=headers)
+    return JSONResponse(content={
         "running": _ingest_state["running"],
         "progress": _ingest_state["progress"],
         "complete": not _ingest_state["running"] and _ingest_state["result"] is None and _ingest_state["error"] is None,
-    }
+    }, headers=headers)
 
 
 class DiscoverOrgRequest(BaseModel):

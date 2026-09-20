@@ -92,7 +92,7 @@ class DualModeVectorStore:
         """Indexes a CodeNode with dense vector representations."""
         return self.index_nodes([node])
 
-    def index_nodes(self, nodes: List[CodeNode]) -> bool:
+    def index_nodes(self, nodes: List[CodeNode], progress_cb: Optional[Any] = None) -> bool:
         """Batch indexes CodeNodes into OpenSearch Serverless or Local store."""
         if not nodes:
             return True
@@ -100,18 +100,53 @@ class DualModeVectorStore:
         if self.env == "aws" and self.aoss_endpoint:
             return self._index_opensearch(nodes)
         else:
-            return self._index_local(nodes)
+            return self._index_local(nodes, progress_cb=progress_cb)
 
-    def _index_local(self, nodes: List[CodeNode]) -> bool:
-        """Local memory indexing with Titan or pseudo-embeddings."""
+    def _index_local(self, nodes: List[CodeNode], progress_cb: Optional[Any] = None) -> bool:
+        """Parallel local memory indexing with Amazon Bedrock Titan Text Embeddings v2."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # Register all documents in memory for fast lexical search
         for node in nodes:
             searchable_text = f"{node.symbol_name} {node.signature} {node.docstring}\n{node.code_content}"
-            vector = self.embedding_client.generate_embedding(searchable_text)
             self._local_documents[node.id] = {
                 "node": node,
                 "text": searchable_text.lower()
             }
-            self._local_vectors[node.id] = vector
+
+        # Select primary architecture symbols (endpoints, classes, functions) for Titan v2 embeddings
+        primary_nodes = [
+            n for n in nodes
+            if n.symbol_type in (SymbolType.ENDPOINT, SymbolType.CLASS, SymbolType.FUNCTION)
+        ]
+        target_nodes = primary_nodes[:60] if len(primary_nodes) > 60 else primary_nodes
+        total_targets = len(target_nodes)
+
+        if not total_targets:
+            return True
+
+        def _embed_node(node: CodeNode):
+            text = f"{node.symbol_name} {node.signature} {node.docstring}\n{node.code_content}"
+            vec = self.embedding_client.generate_embedding(text)
+            return node.id, vec
+
+        completed = 0
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(_embed_node, n) for n in target_nodes]
+            for future in as_completed(futures):
+                try:
+                    nid, vec = future.result()
+                    self._local_vectors[nid] = vec
+                    completed += 1
+                    if progress_cb and (completed % 5 == 0 or completed == total_targets):
+                        progress_cb(
+                            "embedding",
+                            f"Generating Amazon Titan v2 embeddings ({completed}/{total_targets})...",
+                            0.7 + (0.25 * (completed / total_targets))
+                        )
+                except Exception:
+                    pass
+
         return True
 
     def _index_opensearch(self, nodes: List[CodeNode]) -> bool:

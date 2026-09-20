@@ -315,7 +315,7 @@ class GitHubRepoIngester:
             progress_cb("parsing", f"Parsing AST boundaries across {len(repo_paths)} repositories...", 0.7)
 
         # Index the repositories into the CodeGraphToolManager
-        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing)
+        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing, progress_cb=progress_cb)
 
         if progress_cb:
             progress_cb(

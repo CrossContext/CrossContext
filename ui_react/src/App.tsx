@@ -2709,7 +2709,7 @@ function IngestModal({
       // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`${API_BASE}/api/repos/ingest/status`)
+          const statusRes = await fetch(`${API_BASE}/api/repos/ingest/status?t=${Date.now()}`)
           const statusData = await statusRes.json()
           setStatusMsg(statusData.progress || 'Processing...')
 
