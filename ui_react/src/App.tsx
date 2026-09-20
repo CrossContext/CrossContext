@@ -984,22 +984,71 @@ function AgentPanel({
   orgUrl,
   repoName,
   engineConfig,
+  nodes,
+  edges,
 }: {
   onNodeSelect: (id: string | null) => void
   selectedNode: string | null
   orgUrl: string
   repoName: string
   engineConfig: EngineConfig
+  nodes: GraphNode[]
+  edges: GraphEdge[]
 }) {
   const [query, setQuery] = useState('Deprecate /v1/auth/verify endpoint and migrate all frontend consumers to /v2/auth/token')
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<AgentStep[]>([])
   const [response, setResponse] = useState('')
   const [totalTokens, setTotalTokens] = useState(0)
+  const [playgroundKindTab, setPlaygroundKindTab] = useState<'endpoint' | 'class' | 'function'>('endpoint')
   const stepsRef = useRef<HTMLDivElement>(null)
 
-  const runAgent = async () => {
-    if (running || !query.trim()) return
+  // Filter symbols for the playground selector based on active repo scope
+  const scopedNodes = useMemo(() => {
+    return repoName ? nodes.filter(n => n.repo === repoName) : nodes
+  }, [nodes, repoName])
+
+  const categorySymbols = useMemo(() => {
+    return scopedNodes.filter(n => n.kind === playgroundKindTab)
+  }, [scopedNodes, playgroundKindTab])
+
+  // Active selected node object
+  const activeNode = useMemo(() => {
+    return nodes.find(n => n.id === selectedNode) || null
+  }, [nodes, selectedNode])
+
+  // Callers and dependencies for active node
+  const activeNodeRelations = useMemo(() => {
+    if (!selectedNode) return { inbound: 0, outbound: 0, callers: [] as string[], callees: [] as string[] }
+    const callers = edges.filter(e => e.to === selectedNode).map(e => e.from)
+    const callees = edges.filter(e => e.from === selectedNode).map(e => e.to)
+    return {
+      inbound: callers.length,
+      outbound: callees.length,
+      callers,
+      callees,
+    }
+  }, [selectedNode, edges])
+
+  const handleSelectSymbol = (node: GraphNode) => {
+    onNodeSelect(node.id)
+    if (node.kind === 'endpoint') {
+      setQuery(`Deprecate ${node.label} endpoint in ${node.repo} and migrate all cross-repository callers to the latest version`)
+    } else if (node.kind === 'class') {
+      setQuery(`Refactor ${node.label} class in ${node.repo} and verify AST contracts across dependent repositories`)
+    } else {
+      setQuery(`Analyze cross-repo usage of function ${node.label} in ${node.repo} and synthesize dynamic patch`)
+    }
+  }
+
+  const runAgentWithDirective = (directiveText: string) => {
+    setQuery(directiveText)
+    executeAgent(directiveText)
+  }
+
+  const executeAgent = async (overrideQuery?: string) => {
+    const q = overrideQuery || query
+    if (running || !q.trim()) return
     setRunning(true)
     setSteps([])
     setResponse('')
@@ -1010,7 +1059,7 @@ function AgentPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query,
+          query: q,
           env: engineConfig.env,
           model: engineConfig.model,
         })
@@ -1026,7 +1075,7 @@ function AgentPanel({
           tokens: Math.round((data.telemetry?.approx_tokens_used || 101) / tools.length),
           latencyMs: Math.round(((data.telemetry?.total_tool_latency_ms || 1.2) * 10) / tools.length) / 10,
           status: 'done',
-          input: `query: "${query.slice(0, 42)}..."`,
+          input: `query: "${q.slice(0, 42)}..."`,
           output: `McpTool[${t}] resolved symbols across repo boundaries. Blast radius verified.`
         }))
 
@@ -1050,7 +1099,7 @@ function AgentPanel({
           tokens: 24 + i * 12,
           latencyMs: 0.3 + i * 0.2,
           status: 'done',
-          input: `target: ${query.slice(0, 40)}...`,
+          input: `target: ${q.slice(0, 40)}...`,
           output: i === 0 ? 'Traversed 36 nodes, 16 edges across 3 repos' : 'Extracted AST code chunk (repo_frontend_portal:authClient.ts)'
         }
         setSteps(prev => [...prev, step])
@@ -1073,8 +1122,10 @@ function AgentPanel({
     }, 400)
   }
 
+  const runAgent = () => executeAgent()
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Context Strip */}
       {(orgUrl || repoName) && (
         <div style={{
@@ -1098,22 +1149,162 @@ function AgentPanel({
         </div>
       )}
 
-      {/* Highlight Banner */}
-      {selectedNode && (
-        <div style={{
-          padding: '6px 14px', borderBottom: '1px solid var(--color-border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
-          borderLeft: '3px solid #ea580c', background: '#fff7ed'
-        }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#ea580c' }}>
-            focus: {selectedNode.split(':').slice(-2).join(':')}
+      {/* Symbol Playground Quick Selector (API / CLASS / FUNCTION) */}
+      <div style={{
+        padding: '8px 12px', borderBottom: '1px solid var(--color-border)',
+        background: '#FAFAFA', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1 }}>
+            QUICK SYMBOL DIRECTIVES
           </span>
-          <button
-            onClick={() => onNodeSelect(null)}
-            style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 11 }}
-          >
-            clear focus
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['endpoint', 'class', 'function'] as const).map(tab => {
+              const active = playgroundKindTab === tab
+              const label = tab === 'endpoint' ? 'API' : tab === 'class' ? 'CLASS' : 'FUNCTION'
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setPlaygroundKindTab(tab)}
+                  style={{
+                    padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                    background: active ? '#111' : 'white',
+                    color: active ? 'white' : 'var(--color-text-muted)',
+                    border: `1px solid ${active ? '#111' : 'var(--color-border)'}`,
+                    borderRadius: 2, cursor: 'pointer', fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Scrollable Symbol Pills */}
+        <div style={{
+          display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2,
+          scrollbarWidth: 'thin',
+        }}>
+          {categorySymbols.length === 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', padding: '2px 0' }}>
+              No symbols in scope
+            </span>
+          )}
+          {categorySymbols.map(s => {
+            const isSelected = selectedNode === s.id
+            const repoCol = REPO_COLORS[s.repo] || DEFAULT_COLOR
+            return (
+              <button
+                key={s.id}
+                onClick={() => handleSelectSymbol(s)}
+                style={{
+                  padding: '4px 8px',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  fontFamily: 'var(--font-mono)', fontSize: 10,
+                  background: isSelected ? '#111' : 'white',
+                  color: isSelected ? 'white' : '#111',
+                  border: `1px solid ${isSelected ? '#111' : 'var(--color-border)'}`,
+                  borderRadius: 3, cursor: 'pointer', whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all 0.15s ease',
+                  boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.12)' : 'none',
+                }}
+              >
+                <span style={{
+                  fontSize: 8, padding: '1px 3px', borderRadius: 2,
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : repoCol.bg,
+                  color: isSelected ? 'white' : repoCol.main,
+                  fontWeight: 600,
+                }}>
+                  {s.repo.replace('repo_', '')}
+                </span>
+                <span style={{ fontWeight: 600 }}>{s.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Selected Node Action Card */}
+      {activeNode && (
+        <div style={{
+          padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
+          background: '#FFF7ED', borderLeft: '3px solid #EA580C', flexShrink: 0,
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+                padding: '1px 5px', borderRadius: 2,
+                background: KIND_BADGES[activeNode.kind]?.bg || '#f3f4f6',
+                color: KIND_BADGES[activeNode.kind]?.color || '#111',
+                border: `1px solid ${KIND_BADGES[activeNode.kind]?.color || '#ccc'}40`,
+              }}>
+                {KIND_BADGES[activeNode.kind]?.label || activeNode.kind.toUpperCase()}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#111' }}>
+                {activeNode.label}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)' }}>
+                ({activeNode.repo})
+              </span>
+            </div>
+
+            <button
+              onClick={() => onNodeSelect(null)}
+              style={{
+                background: 'transparent', border: 'none',
+                fontFamily: 'var(--font-mono)', fontSize: 10,
+                color: 'var(--color-text-muted)', cursor: 'pointer',
+              }}
+            >
+              clear focus
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+            <span>{activeNode.file_path || 'source file'}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span>{activeNodeRelations.inbound} callers</span>
+              <span>{activeNodeRelations.outbound} dependencies</span>
+            </div>
+          </div>
+
+          {/* 1-Click Action Buttons */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => runAgentWithDirective(`Deprecate ${activeNode.label} in ${activeNode.repo} and migrate all cross-repository callers to the latest version`)}
+              style={{
+                padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                background: '#111', color: 'white', border: '1px solid #111',
+                borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              Run: Deprecate & Migrate
+            </button>
+            <button
+              onClick={() => runAgentWithDirective(`Analyze blast radius and downstream consumers for ${activeNode.kind} ${activeNode.label} across all repositories`)}
+              style={{
+                padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                background: 'white', color: '#111', border: '1px solid var(--color-border-bright)',
+                borderRadius: 2, cursor: 'pointer', fontWeight: 500,
+              }}
+            >
+              Run: Blast Radius
+            </button>
+            <button
+              onClick={() => runAgentWithDirective(`Synthesize multi-repository contract patch and dynamic diff for ${activeNode.label}`)}
+              style={{
+                padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                background: 'white', color: '#111', border: '1px solid var(--color-border-bright)',
+                borderRadius: 2, cursor: 'pointer', fontWeight: 500,
+              }}
+            >
+              Run: Dynamic AST Patch
+            </button>
+          </div>
         </div>
       )}
 
@@ -1124,7 +1315,7 @@ function AgentPanel({
       >
         {steps.length === 0 && !running && (
           <div style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            {`// enter agent directive below and click 'run'`}
+            {`// click a symbol above or enter agent directive below and click 'run'`}
           </div>
         )}
         {steps.map(s => (
@@ -2631,6 +2822,8 @@ export default function App() {
                   orgUrl={orgUrl}
                   repoName={repoName}
                   engineConfig={engineConfig}
+                  nodes={graphNodes}
+                  edges={graphEdges}
                 />
               </div>
             </div>
