@@ -53,6 +53,8 @@ class TreeSitterEngine:
             return self._parse_go(repo, norm_path, content)
         elif ext == "java":
             return self._parse_java(repo, norm_path, content)
+        elif ext in ("cpp", "hpp", "h", "cc", "cxx", "c"):
+            return self._parse_cpp(repo, norm_path, content)
         else:
             return self._parse_generic(repo, norm_path, content)
 
@@ -62,12 +64,20 @@ class TreeSitterEngine:
         all_edges: List[CodeEdge] = []
         root_path = Path(root_dir)
 
-        valid_extensions = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java"}
+        valid_extensions = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".cpp", ".hpp", ".h", ".cc", ".cxx", ".c"}
+        ignored_dirs = [".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build", "third_party", "vendor", "deps"]
         for file in root_path.rglob("*"):
             if file.is_file() and file.suffix in valid_extensions:
                 rel = file.relative_to(root_path).as_posix()
-                if any(ignored in rel for ignored in [".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build"]):
+                if any(ignored in rel for ignored in ignored_dirs):
                     continue
+                # Skip massive generated files (> 500 KB)
+                try:
+                    if file.stat().st_size > 500 * 1024:
+                        continue
+                except OSError:
+                    pass
+
                 try:
                     content = file.read_text(encoding="utf-8", errors="replace")
                     nodes, edges = self.parse_file(repo, rel, content)
@@ -83,7 +93,8 @@ class TreeSitterEngine:
         """Finds the 1-indexed line number of matching closing brace for a code block."""
         depth = 0
         found_open = False
-        for i in range(start_idx - 1, len(lines)):
+        max_idx = min(len(lines), start_idx + 500)
+        for i in range(start_idx - 1, max_idx):
             line = lines[i]
             clean_line = re.sub(r'//.*$|/\*.*?\*/', '', line)
             for ch in clean_line:
@@ -92,9 +103,9 @@ class TreeSitterEngine:
                     found_open = True
                 elif ch == '}':
                     depth -= 1
-                    if found_open and depth == 0:
+                    if found_open and depth <= 0:
                         return i + 1
-        return min(start_idx + 30, len(lines))
+        return min(len(lines), start_idx + 10)
 
     # -------------------------------------------------------------
     # Python Parser Implementation
@@ -657,6 +668,70 @@ class TreeSitterEngine:
                     code_content=block,
                     metadata=meta
                 ))
+
+        return nodes, edges
+
+    def _parse_cpp(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Parses C and C++ source files (functions, methods, classes, structs, and includes)."""
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        includes = re.findall(r'#\s*include\s*["<]([^">]+)[">]', content)
+
+        class_pattern = re.compile(
+            r'^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(?:alignas\([^)]*\)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[^;{]+)?\s*(?:\{|$)'
+        )
+        func_pattern = re.compile(
+            r'^\s*(?:(?:inline|static|constexpr|virtual|explicit|friend|auto)\s+)*(?:(?:const\s+)?[A-Za-z_][A-Za-z0-9_:*&<>\s]+?\s+)?([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^;]*)\)\s*(?:const)?\s*(?:noexcept(?:\([^)]*\))?)?\s*(?:override|final)?\s*(?:->\s*[^;{]+)?\s*(?:\{|$)'
+        )
+
+        def has_body(start_idx: int) -> bool:
+            for j in range(start_idx - 1, min(len(lines), start_idx + 4)):
+                l = lines[j]
+                if '{' in l:
+                    return True
+                if ';' in l:
+                    return False
+            return False
+
+        for idx, line in enumerate(lines, start=1):
+            c_match = class_pattern.search(line)
+            if c_match and has_body(idx):
+                name = c_match.group(1)
+                if name not in ("if", "for", "while", "switch", "return"):
+                    end_line = self._find_closing_brace(lines, idx)
+                    nodes.append(CodeNode(
+                        id=CodeNode.generate_id(repo, file_path, name, idx),
+                        repo=repo,
+                        file_path=file_path,
+                        symbol_name=name,
+                        symbol_type=SymbolType.CLASS,
+                        start_line=idx,
+                        end_line=end_line,
+                        signature=line.strip(),
+                        metadata={"file_imports": includes} if idx == 1 or not nodes else {}
+                    ))
+
+            f_match = func_pattern.search(line)
+            if f_match and has_body(idx) and not c_match:
+                name = f_match.group(1)
+                if name not in ("if", "for", "while", "switch", "catch", "return"):
+                    end_line = self._find_closing_brace(lines, idx)
+                    block = "".join(lines[idx - 1 : end_line])
+                    clean_name = name.split("::")[-1]
+                    nodes.append(CodeNode(
+                        id=CodeNode.generate_id(repo, file_path, clean_name, idx),
+                        repo=repo,
+                        file_path=file_path,
+                        symbol_name=clean_name,
+                        symbol_type=SymbolType.FUNCTION,
+                        start_line=idx,
+                        end_line=end_line,
+                        signature=line.strip(),
+                        code_content=block,
+                        metadata={"file_imports": includes} if not nodes else {}
+                    ))
 
         return nodes, edges
 
