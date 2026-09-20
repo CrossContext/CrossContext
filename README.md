@@ -225,7 +225,29 @@ python scripts/index_github_repos.py "https://github.com/my-org/backend-repo" "h
 
 Add CrossContext to your AI agent's configuration file:
 
-#### 1. In **Cursor** (`.cursor/mcp.json` or Settings $\rightarrow$ Features $\rightarrow$ MCP)
+#### 1. In **Google Antigravity** (Antigravity IDE & CLI)
+Antigravity discovers MCP servers from `mcp_config.json`:
+- **Global**: `~/.gemini/config/mcp_config.json` (Windows: `%USERPROFILE%\.gemini\config\mcp_config.json`)
+- **Workspace**: `.agents/mcp_config.json` (in your repository root)
+
+```json
+{
+  "mcpServers": {
+    "crosscontext": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "/path/to/CrossContext",
+      "env": {
+        "ENV": "local",
+        "SQLITE_DB_PATH": "data/crosscontext_graph.db"
+      }
+    }
+  }
+}
+```
+> In the Antigravity IDE UI, inspect and toggle active tools via **Additional Options (...) > MCP Servers**.
+
+#### 2. In **Cursor** (`.cursor/mcp.json` or Settings $\rightarrow$ Features $\rightarrow$ MCP)
 Create or edit `.cursor/mcp.json` in your workspace root:
 ```json
 {
@@ -243,7 +265,7 @@ Create or edit `.cursor/mcp.json` in your workspace root:
 }
 ```
 
-#### 2. In **Claude Desktop** (`claude_desktop_config.json`)
+#### 3. In **Claude Desktop** (`claude_desktop_config.json`)
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -263,7 +285,7 @@ Create or edit `.cursor/mcp.json` in your workspace root:
 }
 ```
 
-#### 3. In **Windsurf** (`~/.codeium/windsurf/mcp_config.json`)
+#### 4. In **Windsurf** (`~/.codeium/windsurf/mcp_config.json`)
 ```json
 {
   "mcpServers": {
@@ -276,7 +298,7 @@ Create or edit `.cursor/mcp.json` in your workspace root:
 }
 ```
 
-#### 4. In **Official MCP Inspector** (Interactive Browser GUI)
+#### 5. In **Official MCP Inspector** (Interactive Browser GUI)
 Test and debug tool inputs and outputs interactively:
 ```bash
 npx -y @modelcontextprotocol/inspector python -m mcp_server.server
