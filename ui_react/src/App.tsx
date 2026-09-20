@@ -481,17 +481,6 @@ function CrossRepoGraph({
               >
                 +
               </button>
-              <button
-                onClick={resetView}
-                title="Fit to Center"
-                style={{
-                  padding: '0 6px', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: 2,
-                  fontFamily: 'var(--font-mono)', fontSize: 10, cursor: 'pointer', color: 'var(--color-text-muted)',
-                }}
-              >
-                Fit
-              </button>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', marginLeft: 2 }}>
                 {Math.round(zoom * 100)}%
               </span>
