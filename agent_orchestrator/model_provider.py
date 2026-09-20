@@ -15,9 +15,9 @@ from agent_orchestrator.bedrock_client import BedrockClient
 
 class ModelProvider:
     def __init__(self, model_id: Optional[str] = None, env: Optional[str] = None):
-        self.env = env or os.getenv("ENV", "local").lower()
-        self.region = os.getenv("AWS_REGION", "us-east-1")
-        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+        self.env = env or os.getenv("ENV", "aws").lower()
+        self.region = os.getenv("AWS_REGION", "us-west-2")
+        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
         self.bedrock = BedrockClient(region_name=self.region)
 
     def invoke_with_tools(
