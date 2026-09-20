@@ -458,9 +458,11 @@ DIST_PATH = PROJECT_ROOT / "ui_react" / "dist"
 if DIST_PATH.is_dir():
     app.mount("/assets", StaticFiles(directory=str(DIST_PATH / "assets")), name="assets")
 
+    HTML_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
     @app.get("/")
     async def serve_root():
-        return FileResponse(str(DIST_PATH / "index.html"))
+        return FileResponse(str(DIST_PATH / "index.html"), headers=HTML_HEADERS)
 
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
@@ -468,8 +470,10 @@ if DIST_PATH.is_dir():
             raise HTTPException(status_code=404, detail="API endpoint not found")
         file_path = DIST_PATH / full_path
         if file_path.is_file():
+            if "/assets/" in str(file_path):
+                return FileResponse(str(file_path), headers={"Cache-Control": "public, max-age=31536000, immutable"})
             return FileResponse(str(file_path))
-        return FileResponse(str(DIST_PATH / "index.html"))
+        return FileResponse(str(DIST_PATH / "index.html"), headers=HTML_HEADERS)
 
 
 if __name__ == "__main__":
