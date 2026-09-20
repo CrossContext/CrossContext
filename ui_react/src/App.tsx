@@ -55,9 +55,17 @@ interface SystemStats {
 
 // ── Default constants ────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000' : '')
+const PALETTE = [
+  { main: '#2563eb', bg: '#eff6ff', border: '#93c5fd' },
+  { main: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd' },
+  { main: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+  { main: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  { main: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  { main: '#0891b2', bg: '#ecfeff', border: '#a5f3fc' },
+  { main: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
+]
 
-const REPO_COLORS: Record<string, { main: string; bg: string; border: string }> = {
+const KNOWN_REPO_COLORS: Record<string, { main: string; bg: string; border: string }> = {
   repo_auth_core: { main: '#ea580c', bg: '#fff7ed', border: '#fdba74' },
   repo_frontend_portal: { main: '#2563eb', bg: '#eff6ff', border: '#93c5fd' },
   repo_shared_sdk: { main: '#16a34a', bg: '#f0fdf4', border: '#86efac' },
@@ -66,6 +74,18 @@ const REPO_COLORS: Record<string, { main: string; bg: string; border: string }> 
 }
 
 const DEFAULT_COLOR = { main: '#4b5563', bg: '#f9fafb', border: '#d1d5db' }
+
+function getRepoColor(repoName?: string | null) {
+  if (!repoName) return DEFAULT_COLOR
+  if (KNOWN_REPO_COLORS[repoName]) return KNOWN_REPO_COLORS[repoName]
+  let hash = 0
+  for (let i = 0; i < repoName.length; i++) {
+    hash = (hash << 5) - hash + repoName.charCodeAt(i)
+    hash |= 0
+  }
+  const idx = Math.abs(hash) % PALETTE.length
+  return PALETTE[idx]
+}
 
 const KIND_BADGES: Record<string, { label: string; color: string; bg: string }> = {
   endpoint: { label: 'API', color: '#dc2626', bg: '#fef2f2' },
@@ -82,196 +102,16 @@ const DEFAULT_ENGINE: EngineConfig = {
   indexStrategy: 'ast',
   cycleDetection: true,
 }
-
-const FALLBACK_NODES: GraphNode[] = [
-  { id: 'repo_auth_core:auth.py:verify_legacy_auth:24', label: 'verify_legacy_auth', repo: 'repo_auth_core', kind: 'endpoint', x: 80, y: 70, file_path: 'src/api/auth.py', start_line: 24, end_line: 32 },
-  { id: 'repo_auth_core:auth.py:generate_v2_token:35', label: 'generate_v2_token', repo: 'repo_auth_core', kind: 'endpoint', x: 80, y: 122, file_path: 'src/api/auth.py', start_line: 35, end_line: 46 },
-  { id: 'repo_auth_core:security.py:hash_password:8', label: 'hash_password', repo: 'repo_auth_core', kind: 'function', x: 80, y: 174, file_path: 'security.py', start_line: 8, end_line: 12 },
-  { id: 'repo_shared_sdk:client.py:AuthCoreClient:7', label: 'AuthCoreClient', repo: 'repo_shared_sdk', kind: 'class', x: 400, y: 70, file_path: 'auth_sdk/client.py', start_line: 7, end_line: 24 },
-  { id: 'repo_shared_sdk:models.py:ClientSession:7', label: 'ClientSession', repo: 'repo_shared_sdk', kind: 'class', x: 400, y: 122, file_path: 'auth_sdk/models.py', start_line: 7, end_line: 14 },
-  { id: 'repo_frontend_portal:authClient.ts:verifyUserSession:22', label: 'verifyUserSession', repo: 'repo_frontend_portal', kind: 'function', x: 720, y: 70, file_path: 'src/services/authClient.ts', start_line: 22, end_line: 35 },
-  { id: 'repo_frontend_portal:useAuth.ts:useAuth:16', label: 'useAuth', repo: 'repo_frontend_portal', kind: 'function', x: 720, y: 122, file_path: 'src/hooks/useAuth.ts', start_line: 16, end_line: 45 },
-  { id: 'repo_frontend_portal:LoginForm.tsx:LoginForm:9', label: 'LoginForm', repo: 'repo_frontend_portal', kind: 'class', x: 720, y: 174, file_path: 'src/components/LoginForm.tsx', start_line: 9, end_line: 38 },
-]
-
-const FALLBACK_EDGES: GraphEdge[] = [
-  { from: 'repo_frontend_portal:authClient.ts:verifyUserSession:22', to: 'repo_auth_core:auth.py:verify_legacy_auth:24', kind: 'http', edge_type: 'consumes_api' },
-  { from: 'repo_shared_sdk:client.py:AuthCoreClient:7', to: 'repo_auth_core:auth.py:verify_legacy_auth:24', kind: 'http', edge_type: 'consumes_api' },
-  { from: 'repo_frontend_portal:useAuth.ts:useAuth:16', to: 'repo_frontend_portal:authClient.ts:verifyUserSession:22', kind: 'calls', edge_type: 'calls' },
-  { from: 'repo_frontend_portal:LoginForm.tsx:LoginForm:9', to: 'repo_frontend_portal:authClient.ts:verifyUserSession:22', kind: 'calls', edge_type: 'calls' },
-]
-
-const FALLBACK_BLUEPRINT = {
-  analysis: {
-    total_repositories: 3,
-    all_repositories: ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk'],
-    selected_repositories: ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk'],
-    is_filtered: false,
-    summary: {
-      repositories_analyzed: 3,
-      total_symbols: 36,
-      total_cross_repo_contracts: 4,
-      system_type: 'Federated Microservices & Monorepo Mesh',
-    },
-    repositories: [
-      {
-        repo_name: 'repo_auth_core',
-        primary_language: 'Python',
-        total_symbols: 14,
-        role: 'Central Authentication & Token Authority',
-        key_apis: ['POST /v1/auth/verify', 'POST /v2/auth/token'],
-      },
-      {
-        repo_name: 'repo_frontend_portal',
-        primary_language: 'TypeScript',
-        total_symbols: 12,
-        role: 'Customer-facing Single Page Application',
-        dependencies: ['repo_auth_core', 'repo_shared_sdk'],
-      },
-      {
-        repo_name: 'repo_shared_sdk',
-        primary_language: 'Python',
-        total_symbols: 10,
-        role: 'Cross-service SDK & Data Contract Models',
-        dependencies: ['repo_auth_core'],
-      },
-    ],
-    cross_repo_contracts: [
-      {
-        source_repo: 'repo_frontend_portal',
-        target_repo: 'repo_auth_core',
-        consumer_symbol: 'verifyUserSession',
-        provider_symbol: 'verify_legacy_auth',
-        contract_type: 'HTTP REST / JSON',
-        risk_level: 'HIGH (Breaking on endpoint deprecation)',
-      },
-      {
-        source_repo: 'repo_shared_sdk',
-        target_repo: 'repo_auth_core',
-        consumer_symbol: 'AuthCoreClient.verify_token',
-        provider_symbol: 'verify_legacy_auth',
-        contract_type: 'HTTP REST / JSON',
-        risk_level: 'HIGH',
-      },
-    ],
-    architecture_patterns: [
-      'Token-based Bearer Authentication Mesh',
-      'SCIP-derived Cross-Repository Dependency Inversion',
-      'Deterministic AST Call Graph Linking',
-    ],
-  },
-  ai_context: `=== CROSSCONTEXT FEDERATED REPOSITORY BLUEPRINT ===
-Scope: 3 Indexed Repositories (repo_auth_core, repo_frontend_portal, repo_shared_sdk)
-
-1. REPOSITORY TOPOLOGY:
-- repo_auth_core (Python/FastAPI): Central auth authority. Exports POST /v1/auth/verify, POST /v2/auth/token.
-- repo_frontend_portal (TypeScript/React): Client UI. Consumes repo_auth_core auth endpoints via src/services/authClient.ts.
-- repo_shared_sdk (Python SDK): Shared client wrapper and models. Consumes verify_legacy_auth.
-
-2. CROSS-REPOSITORY BLAST RADIUS:
-- Deprecating or altering 'verify_legacy_auth' in repo_auth_core breaks both repo_frontend_portal:verifyUserSession and repo_shared_sdk:AuthCoreClient.
-- Required migration: Upgrade callers to /v2/auth/token.
-
-3. OPTIMIZED AI INSTRUCTION:
-When generating code modifications for repo_auth_core, ensure backward compatibility headers or atomically patch authClient.ts in repo_frontend_portal.`,
-  approx_tokens: 284,
-  selected_repos: ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk'],
-  all_repositories: ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk'],
-  is_filtered: false,
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname || '127.0.0.1'
+    if (host === 'localhost' || host === '127.0.0.1') return `http://${host}:8000`
+    return ''
+  }
+  return 'http://127.0.0.1:8000'
 }
-
-const FALLBACK_FILES: Record<string, string> = {
-  'src/api/auth.py': `from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-
-router = APIRouter(prefix="/v1/auth")
-
-@router.post("/verify")
-def verify_legacy_auth(token: str):
-    """Legacy session token verification endpoint.
-    CALLED BY: repo_frontend_portal (src/services/authClient.ts)
-               repo_shared_sdk (auth_sdk/client.py)
-    """
-    if not token or not token.startswith("tok_"):
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return {"status": "authenticated", "user_id": "usr_9981"}
-
-@router.post("/v2/token")
-def generate_v2_token(req: TokenRequest):
-    """Modern JWT OAuth2 token exchange endpoint."""
-    return {"access_token": "jwt_cross_repo_token", "token_type": "bearer"}
-`,
-  'security.py': `import hashlib
-
-def hash_password(password: str) -> str:
-    """Computes SHA-256 digest for stored credential comparisons."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-`,
-  'src/services/authClient.ts': `import axios from 'axios';
-
-export async function verifyUserSession(sessionToken: string) {
-  // CRITICAL: Consumes auth_core endpoint /v1/auth/verify
-  // Blast Radius Risk: Modifying /v1/auth/verify will break this client!
-  const response = await axios.post('http://auth-service/v1/auth/verify', {
-    token: sessionToken,
-  });
-  return response.data;
-}
-`,
-  'src/hooks/useAuth.ts': `import { useState, useEffect } from 'react';
-import { verifyUserSession } from '../services/authClient';
-
-export function useAuth() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      verifyUserSession(token)
-        .then(u => setUser(u))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  return { user, loading };
-}
-`,
-  'src/components/LoginForm.tsx': `import React, { useState } from 'react';
-import { verifyUserSession } from '../services/authClient';
-
-export function LoginForm() {
-  const [token, setToken] = useState('');
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await verifyUserSession(token);
-  };
-  return <form onSubmit={handleSubmit}><input value={token} onChange={e => setToken(e.target.value)} /></form>;
-}
-`,
-  'auth_sdk/client.py': `import requests
-
-class AuthCoreClient:
-    """Client SDK for microservice authentication."""
-    def __init__(self, base_url: str = "http://auth-service"):
-        self.base_url = base_url
-
-    def verify_token(self, token: str) -> bool:
-        # Cross-repo contract with repo_auth_core
-        resp = requests.post(f"{self.base_url}/v1/auth/verify", json={"token": token})
-        return resp.status_code == 200
-`,
-  'auth_sdk/models.py': `from pydantic import BaseModel
-from typing import Optional
-
-class ClientSession(BaseModel):
-    user_id: str
-    token: str
-    expires_in: int = 3600
-`,
-}
+const API_BASE = getApiBase()
 
 // ── Interactive 2D Movable & Zoomable Graph Component ────────────────────────
 
@@ -561,7 +401,7 @@ function CrossRepoGraph({
             all repos ({nodes.length})
           </button>
           {repos.map(r => {
-            const col = REPO_COLORS[r]?.main || '#111'
+            const col = getRepoColor(r).main
             const active = repoFilter === r
             const count = nodes.filter(n => n.repo === r).length
             return (
@@ -724,7 +564,7 @@ function CrossRepoGraph({
               const isConnected = isCaller || isCallee
               const isDimmed = selectedNode !== null && !isSelected && !isConnected
 
-              const repoCol = REPO_COLORS[n.repo] || DEFAULT_COLOR
+              const repoCol = getRepoColor(n.repo)
               const badge = KIND_BADGES[n.kind] || KIND_BADGES.function
 
               const inbound = edges.filter(e => e.to === n.id).length
@@ -889,7 +729,7 @@ function CrossRepoGraph({
             if (!n) return null
             const inbound = edges.filter(e => e.to === n.id)
             const outbound = edges.filter(e => e.from === n.id)
-            const col = REPO_COLORS[n.repo]?.main || '#111'
+            const col = getRepoColor(n.repo).main
 
             return (
               <div style={{
@@ -1072,7 +912,7 @@ function CrossRepoGraph({
             )}
             {activePriorityList.map((item, idx) => {
               const isSelected = selectedNode === item.id
-              const repoCol = REPO_COLORS[item.repo] || DEFAULT_COLOR
+              const repoCol = getRepoColor(item.repo)
 
               return (
                 <div
@@ -1198,7 +1038,7 @@ function AgentPanel({
   nodes: GraphNode[]
   edges: GraphEdge[]
 }) {
-  const [query, setQuery] = useState('Deprecate /v1/auth/verify endpoint and migrate all frontend consumers to /v2/auth/token')
+  const [query, setQuery] = useState('Analyze cross-repository dependencies and AST contract boundaries')
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<AgentStep[]>([])
   const [response, setResponse] = useState('')
@@ -1257,23 +1097,38 @@ function AgentPanel({
     setResponse('')
     setTotalTokens(0)
 
-    if (API_BASE) {
-      try {
-        const res = await fetch(`${API_BASE}/api/agent/run`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: q,
-            env: engineConfig.env,
-            model: engineConfig.model,
-          })
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: q,
+          env: engineConfig.env,
+          model: engineConfig.model,
         })
+      })
 
-        if (res.ok) {
-          const data = await res.json()
-          const tools = data.telemetry?.tool_sequence || ['traverse_call_graph', 'get_ast_chunk']
+      if (res.ok) {
+        const data = await res.json()
+        const tools = data.telemetry?.tool_sequence || []
+        const eventLog = data.event_log || []
 
-          const genSteps: AgentStep[] = tools.map((t: string, idx: number) => ({
+        let genSteps: AgentStep[] = []
+        if (eventLog.length > 0) {
+          genSteps = eventLog.map((evt: any, idx: number) => {
+            const toolName = evt.type === 'thinking' ? 'reasoning_turn' : (evt.message?.match(/`([^`]+)`/)?.[1] || evt.type || 'tool_call')
+            return {
+              id: idx + 1,
+              tool: toolName,
+              tokens: Math.round((data.telemetry?.approx_tokens_used || 60) / Math.max(eventLog.length, 1)),
+              latencyMs: 1.2,
+              status: 'done',
+              input: evt.message || `Event #${idx + 1}`,
+              output: evt.type === 'thinking' ? 'Reasoning step executed.' : evt.message
+            }
+          })
+        } else if (tools.length > 0) {
+          genSteps = tools.map((t: string, idx: number) => ({
             id: idx + 1,
             tool: t,
             tokens: Math.round((data.telemetry?.approx_tokens_used || 101) / tools.length),
@@ -1282,48 +1137,50 @@ function AgentPanel({
             input: `query: "${q.slice(0, 42)}..."`,
             output: `McpTool[${t}] resolved symbols across repo boundaries. Blast radius verified.`
           }))
-          setSteps(genSteps)
-          setTotalTokens(data.telemetry?.approx_tokens_used || 101)
-          setResponse(data.response || 'Plan formulated deterministically across multi-repo AST knowledge graph.')
-          setRunning(false)
-          return
+        } else {
+          genSteps = [{
+            id: 1,
+            tool: 'direct_synthesis',
+            tokens: data.telemetry?.approx_tokens_used || 48,
+            latencyMs: 1.0,
+            status: 'done',
+            input: q,
+            output: 'Resolved context directly against active AST graph store.'
+          }]
         }
-      } catch {
-        // Offline fallback simulator
-      }
-    }
 
-    const fallbackTools = ['traverse_call_graph', 'get_usage_dependency_links', 'get_ast_chunk']
-    let i = 0
-    const interval = setInterval(() => {
-      if (i < fallbackTools.length) {
-        const step: AgentStep = {
-          id: i + 1,
-          tool: fallbackTools[i],
-          tokens: 24 + i * 12,
-          latencyMs: 0.3 + i * 0.2,
-          status: 'done',
-          input: `target: ${q.slice(0, 40)}...`,
-          output: i === 0 ? 'Traversed 36 nodes, 16 edges across 3 repos' : 'Extracted AST code chunk (repo_frontend_portal:authClient.ts)'
-        }
-        setSteps(prev => [...prev, step])
-        setTotalTokens(prev => prev + step.tokens)
-        i++
-        stepsRef.current?.scrollTo({ top: 9999, behavior: 'smooth' })
-      } else {
-        clearInterval(interval)
+        setSteps(genSteps)
+        setTotalTokens(data.telemetry?.approx_tokens_used || 0)
+        setResponse(data.response || 'Plan formulated deterministically across multi-repo AST knowledge graph.')
         setRunning(false)
-        setResponse(
-          '### Cross-Repository Migration Plan Formulated:\n\n' +
-          '1. **Backend Service (`repo_auth_core`)**:\n' +
-          '   - Mark `/v1/auth/verify` as deprecated with sunset header.\n' +
-          '   - Ensure `/v2/auth/token` endpoint is active for client credential flows.\n\n' +
-          '2. **Frontend Portal (`repo_frontend_portal`)**:\n' +
-          '   - In `src/services/authClient.ts` (`verifyUserSession`), update endpoint target from `/v1/auth/verify` to `/v2/auth/token`.\n\n' +
-          '**Zero Breakage Verified**: All federated repositories mapped deterministically with 94.9% token reduction.'
-        )
+        return
+      } else {
+        const errText = await res.text()
+        setSteps([{
+          id: 1,
+          tool: 'error_handler',
+          tokens: 0,
+          latencyMs: 0,
+          status: 'done',
+          input: q,
+          output: `Agent API responded with status ${res.status}: ${errText}`
+        }])
+        setResponse(`Agent execution failed (${res.status}): ${errText}`)
+        setRunning(false)
       }
-    }, 400)
+    } catch (e: any) {
+      setSteps([{
+        id: 1,
+        tool: 'network_error',
+        tokens: 0,
+        latencyMs: 0,
+        status: 'done',
+        input: q,
+        output: `Failed to connect to ${API_BASE}/api/agent/run: ${e?.message || e}`
+      }])
+      setResponse(`Network error: Could not reach CrossContext backend at ${API_BASE}. Ensure the backend server is running.`)
+      setRunning(false)
+    }
   }
 
   const runAgent = () => executeAgent()
@@ -1387,7 +1244,7 @@ function AgentPanel({
           )}
           {categorySymbols.map(s => {
             const isSelected = selectedNode === s.id
-            const repoCol = REPO_COLORS[s.repo] || DEFAULT_COLOR
+            const repoCol = getRepoColor(s.repo)
             return (
               <button
                 key={s.id}
@@ -1606,14 +1463,14 @@ function AgentPanel({
 
 // ── Benchmarks View ───────────────────────────────────────────────────────────
 
-function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
+function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: SystemStats }) {
   const [liveBench, setLiveBench] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [activeTab, setActiveTab] = useState<'matrix' | 'repoqa' | 'codescale' | 'simulator'>('matrix')
 
   // Interactive simulator state
-  const [simQuery, setSimQuery] = useState('Deprecate /v1/auth/verify endpoint and update frontend consumers')
+  const [simQuery, setSimQuery] = useState('Analyze cross-repo callers and verify zero breakage contract')
   const [simRunning, setSimRunning] = useState(false)
   const [simResult, setSimResult] = useState<any>(null)
   const [lastEvaluatedAt, setLastEvaluatedAt] = useState<string>('')
@@ -1626,19 +1483,13 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
         setProgress(p => (p < 85 ? p + 20 : p))
       }, 120)
 
-      if (API_BASE) {
-        const res = await fetch(`${API_BASE}/api/benchmarks`)
-        clearInterval(interval)
-        setProgress(100)
+      const res = await fetch(`${API_BASE}/api/benchmarks`)
+      clearInterval(interval)
+      setProgress(100)
 
-        if (res.ok) {
-          const d = await res.json()
-          setLiveBench(d)
-          setLastEvaluatedAt(new Date().toLocaleTimeString())
-        }
-      } else {
-        clearInterval(interval)
-        setProgress(100)
+      if (res.ok) {
+        const d = await res.json()
+        setLiveBench(d)
         setLastEvaluatedAt(new Date().toLocaleTimeString())
       }
     } catch {
@@ -1663,8 +1514,14 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
     setTimeout(() => {
       const elapsed = Math.max(Number((performance.now() - startTime).toFixed(2)), 0.45)
       const qLower = simQuery.toLowerCase()
-      const isAuthDeprecation = qLower.includes('auth') || qLower.includes('verify') || qLower.includes('token')
-      const isClientRefactor = qLower.includes('client') || qLower.includes('session') || qLower.includes('sdk')
+      const activeRepos = stats?.repositories && stats.repositories.length > 0 ? stats.repositories : ['active_codebase']
+      const targetRepo = activeRepos[0]
+      const isAuthDeprecation = qLower.includes('auth') || qLower.includes('verify') || qLower.includes('token') || qLower.includes('deprecat')
+      const isClientRefactor = qLower.includes('client') || qLower.includes('session') || qLower.includes('sdk') || qLower.includes('refactor')
+
+      const reposCovered = activeRepos.length > 1
+        ? (isAuthDeprecation ? activeRepos.slice(0, 3) : activeRepos.slice(0, 2))
+        : activeRepos
 
       setSimResult({
         query: simQuery,
@@ -1672,21 +1529,17 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
         ast: {
           tokens: isAuthDeprecation ? 109 : (isClientRefactor ? 84 : 126),
           latencyMs: elapsed,
-          hops: isAuthDeprecation ? 3 : (isClientRefactor ? 2 : 1),
-          reposCovered: isAuthDeprecation
-            ? ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk']
-            : (isClientRefactor ? ['repo_shared_sdk', 'repo_frontend_portal'] : ['repo_auth_core']),
-          breakagesFound: isAuthDeprecation ? 2 : (isClientRefactor ? 2 : 1),
+          hops: Math.min(reposCovered.length, 3),
+          reposCovered: reposCovered,
+          breakagesFound: Math.max(reposCovered.length - 1, 1),
           accuracy: '100% (Deterministic AST)',
-          callers: isAuthDeprecation
-            ? ['repo_frontend_portal: src/services/authClient.ts', 'repo_shared_sdk: auth_sdk/client.py']
-            : ['repo_frontend_portal: src/services/authClient.ts'],
+          callers: reposCovered.map(r => `${r} (AST graph linked)`),
         },
         rag: {
           tokens: isAuthDeprecation ? 14600 : (isClientRefactor ? 9800 : 7200),
           latencyMs: Number((elapsed * 480 + 2100).toFixed(1)),
           hops: 0,
-          reposCovered: ['repo_auth_core (partial)'],
+          reposCovered: [`${targetRepo} (partial)`],
           breakagesFound: 0,
           accuracy: '0% (Missed cross-repo contract)',
         },
@@ -1906,41 +1759,13 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
                 </div>
               ))
             ) : (
-              [
-                {
-                  id: 'TC-1',
-                  query: 'Locate user session authentication verification handler',
-                  target: 'verify_jwt_token',
-                  repo: 'repo_auth_core (src/api/auth.py:24)',
-                  tokensAST: 72,
-                  tokensRAG: 4200,
-                  result: 'Exact AST Node Match',
-                },
-                {
-                  id: 'TC-2',
-                  query: 'Find client SDK wrapper for authentication sessions',
-                  target: 'validate_v1_legacy_signature',
-                  repo: 'repo_auth_core (src/api/auth.py:48)',
-                  tokensAST: 37,
-                  tokensRAG: 3800,
-                  result: 'Exact Function Match',
-                },
-              ].map(tc => (
-                <div key={tc.id} style={{
-                  background: 'white', border: '1px solid var(--color-border)',
-                  borderRadius: 3, padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, color: '#111' }}>{tc.id}: "{tc.query}"</span>
-                    <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 10 }}>{tc.result}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--color-text-muted)' }}>
-                    <div>Target: <code style={{ color: '#111' }}>{tc.target}</code></div>
-                    <div>Location: <code>{tc.repo}</code></div>
-                    <div>AST Tokens: <span style={{ color: '#16a34a', fontWeight: 600 }}>{tc.tokensAST}</span> vs RAG: <span style={{ color: '#dc2626' }}>{tc.tokensRAG}</span></div>
-                  </div>
-                </div>
-              ))
+              <div style={{
+                background: 'white', border: '1px solid var(--color-border)',
+                borderRadius: 3, padding: '24px 16px', textAlign: 'center',
+                fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)'
+              }}>
+                {loading ? 'Running RepoQA evaluation across indexed repositories...' : 'No RepoQA test runs available.'}
+              </div>
             )}
           </div>
         </div>
@@ -1985,29 +1810,13 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
                 </div>
               ))
             ) : (
-              [
-                {
-                  id: 'CS-1',
-                  scenario: 'Deprecating /v1/auth/verify in repo_auth_core',
-                  expectedBreakages: ['repo_frontend_portal:src/services/authClient.ts', 'repo_shared_sdk:auth_sdk/client.py'],
-                  astDetected: '2 of 2 callers detected (100%)',
-                  ragDetected: '0 of 2 callers detected (0% - Missed cross-repo link)',
-                },
-              ].map(cs => (
-                <div key={cs.id} style={{
-                  background: 'white', border: '1px solid var(--color-border)',
-                  borderRadius: 3, padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                }}>
-                  <div style={{ fontWeight: 700, color: '#111', marginBottom: 6 }}>{cs.id}: {cs.scenario}</div>
-                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                    Expected Blast Radius: {cs.expectedBreakages.join(', ')}
-                  </div>
-                  <div style={{ display: 'flex', gap: 16, fontSize: 10, marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--color-border)' }}>
-                    <div>CrossContext AST: <span style={{ color: '#16a34a', fontWeight: 600 }}>{cs.astDetected}</span></div>
-                    <div>Naive Text RAG: <span style={{ color: '#dc2626' }}>{cs.ragDetected}</span></div>
-                  </div>
-                </div>
-              ))
+              <div style={{
+                background: 'white', border: '1px solid var(--color-border)',
+                borderRadius: 3, padding: '24px 16px', textAlign: 'center',
+                fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)'
+              }}>
+                {loading ? 'Evaluating CodeScaleBench multi-repository deprecation scenarios...' : 'No CodeScaleBench scenario runs available.'}
+              </div>
             )}
           </div>
         </div>
@@ -2127,41 +1936,27 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
 
   const loadBlueprint = useCallback(async (reposToFilter?: string[]) => {
     setLoading(true)
-    let loaded = false
+    try {
+      const url = reposToFilter && reposToFilter.length > 0
+        ? `${API_BASE}/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
+        : `${API_BASE}/api/org/blueprint`
 
-    if (API_BASE) {
-      try {
-        const url = reposToFilter && reposToFilter.length > 0
-          ? `${API_BASE}/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
-          : `${API_BASE}/api/org/blueprint`
-
-        const res = await fetch(url)
-        if (res.ok) {
-          const d = await res.json()
-          setData(d)
-          const all = d.all_repositories || (d.analysis?.repositories ? d.analysis.repositories.map((r: any) => r.repo_name) : [])
-          if (all && all.length > 0) {
-            setAvailableRepos(all)
-            if (!reposToFilter) {
-              setSelectedRepos(all)
-            }
-          }
-          loaded = true
-        }
-      } catch {
-        // Fallback below
-      }
-    }
-
-    if (!loaded) {
-      const d = FALLBACK_BLUEPRINT
+      const res = await fetch(url)
+      const d = await res.json()
       setData(d)
-      setAvailableRepos(d.all_repositories)
-      if (!reposToFilter) {
-        setSelectedRepos(d.all_repositories)
+
+      const all = d.all_repositories || (d.analysis?.repositories ? d.analysis.repositories.map((r: any) => r.repo_name) : [])
+      if (all && all.length > 0) {
+        setAvailableRepos(all)
+        if (!reposToFilter) {
+          setSelectedRepos(all)
+        }
       }
+    } catch {
+      // Retain existing state on fetch failure
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -2557,66 +2352,39 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
   // Fetch all graph nodes to derive unique files for selected repo
   useEffect(() => {
     if (!selectedRepo) return
-    if (API_BASE) {
-      fetch(`${API_BASE}/api/graph`)
-        .then(r => r.json())
-        .then(g => {
-          const matchingFiles = Array.from(new Set(
-            (g.nodes || [])
-              .filter((n: any) => n.repo === selectedRepo && n.file_path)
-              .map((n: any) => n.file_path as string)
-          )).sort() as string[]
-          setFileList(matchingFiles)
-          if (matchingFiles.length > 0) {
-            setSelectedFile(prev => matchingFiles.includes(prev) ? prev : matchingFiles[0])
-          } else {
-            setSelectedFile('')
-            setFileContent('')
-          }
-        })
-        .catch(() => {
-          const matchingFiles = Array.from(new Set(
-            FALLBACK_NODES
-              .filter((n: any) => n.repo === selectedRepo && n.file_path)
-              .map((n: any) => n.file_path as string)
-          )).sort() as string[]
-          setFileList(matchingFiles)
-          if (matchingFiles.length > 0) {
-            setSelectedFile(prev => matchingFiles.includes(prev) ? prev : matchingFiles[0])
-          }
-        })
-    } else {
-      const matchingFiles = Array.from(new Set(
-        FALLBACK_NODES
-          .filter((n: any) => n.repo === selectedRepo && n.file_path)
-          .map((n: any) => n.file_path as string)
-      )).sort() as string[]
-      setFileList(matchingFiles)
-      if (matchingFiles.length > 0) {
-        setSelectedFile(prev => matchingFiles.includes(prev) ? prev : matchingFiles[0])
-      }
-    }
+    fetch(`${API_BASE}/api/graph`)
+      .then(r => r.json())
+      .then(g => {
+        const matchingFiles = Array.from(new Set(
+          (g.nodes || [])
+            .filter((n: any) => n.repo === selectedRepo && n.file_path)
+            .map((n: any) => n.file_path as string)
+        )).sort() as string[]
+        setFileList(matchingFiles)
+        if (matchingFiles.length > 0) {
+          setSelectedFile(prev => matchingFiles.includes(prev) ? prev : matchingFiles[0])
+        } else {
+          setSelectedFile('')
+          setFileContent('')
+        }
+      })
+      .catch(() => {})
   }, [selectedRepo, dataVersion])
 
   // Fetch content when file changes
   useEffect(() => {
     if (!selectedRepo || !selectedFile) return
     setLoadingFile(true)
-    if (API_BASE) {
-      fetch(`${API_BASE}/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
-        .then(r => r.json())
-        .then(res => {
-          setFileContent(res.content || FALLBACK_FILES[selectedFile] || '(File content empty or unavailable on disk)')
-          setLoadingFile(false)
-        })
-        .catch(() => {
-          setFileContent(FALLBACK_FILES[selectedFile] || `// Source code for ${selectedFile} in ${selectedRepo}\n// AST indexed symbols extracted deterministically.`)
-          setLoadingFile(false)
-        })
-    } else {
-      setFileContent(FALLBACK_FILES[selectedFile] || `// Source code for ${selectedFile} in ${selectedRepo}\n// AST indexed symbols extracted deterministically.`)
-      setLoadingFile(false)
-    }
+    fetch(`${API_BASE}/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
+      .then(r => r.json())
+      .then(res => {
+        setFileContent(res.content || '(File content empty or unavailable on disk)')
+        setLoadingFile(false)
+      })
+      .catch(() => {
+        setFileContent('(Error loading file from server)')
+        setLoadingFile(false)
+      })
   }, [selectedRepo, selectedFile])
 
   const filteredFiles = useMemo(() => {
@@ -2838,65 +2606,27 @@ function IngestModal({
     setDiscoveredRepos([])
     setSelectedOrgRepos([])
 
-    let repos: string[] = []
-
-    // 1. Try local/configured backend endpoint first
-    if (API_BASE) {
-      try {
-        const discRes = await fetch(`${API_BASE}/api/repos/discover-org`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ org: orgInput.trim() }),
-        })
-        if (discRes.ok) {
-          const discData = await discRes.json()
-          if (discData.repositories && discData.repositories.length > 0) {
-            repos = discData.repositories
-          }
-        }
-      } catch {
-        // Backend unreachable or blocked by mixed content on deployed cloud domain
+    try {
+      const discRes = await fetch(`${API_BASE}/api/repos/discover-org`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org: orgInput.trim() }),
+      })
+      const discData = await discRes.json()
+      if (!discData.repositories || discData.repositories.length === 0) {
+        setStatusMsg(`No public repositories found for '${orgInput.trim()}'.`)
+        setDiscovering(false)
+        return
       }
-    }
 
-    // 2. Direct client-side GitHub REST API fallback (works natively on AWS Amplify / Cloud deployments!)
-    if (repos.length === 0) {
-      try {
-        let cleanOrg = orgInput.trim()
-          .replace(/^https?:\/\/github\.com\//i, '')
-          .replace(/^(orgs|users)\//i, '')
-          .split('/')[0]
-          .replace(/[^a-zA-Z0-9_\-]/g, '')
-
-        if (cleanOrg) {
-          // Try GitHub Organization repos first
-          let ghRes = await fetch(`https://api.github.com/orgs/${cleanOrg}/repos?per_page=100&sort=pushed`)
-          if (!ghRes.ok) {
-            // Fallback to GitHub User repos
-            ghRes = await fetch(`https://api.github.com/users/${cleanOrg}/repos?per_page=100&sort=pushed`)
-          }
-          if (ghRes.ok) {
-            const ghData = await ghRes.json()
-            if (Array.isArray(ghData)) {
-              repos = ghData.map((r: any) => r.clone_url || r.html_url)
-            }
-          }
-        }
-      } catch (err: any) {
-        console.warn('Client-side GitHub discovery fallback error:', err)
-      }
-    }
-
-    if (repos.length === 0) {
-      setStatusMsg(`No public repositories found for '${orgInput.trim()}'. Please verify the organization name or enter custom URLs.`)
+      setDiscoveredRepos(discData.repositories)
+      setSelectedOrgRepos(discData.repositories)
+      setStatusMsg(`Discovered ${discData.repositories.length} repositories for '${orgInput.trim()}'. Select the repositories you wish to ingest below:`)
+    } catch (e: any) {
+      setStatusMsg(`Discovery failed: ${e.message}`)
+    } finally {
       setDiscovering(false)
-      return
     }
-
-    setDiscoveredRepos(repos)
-    setSelectedOrgRepos(repos)
-    setStatusMsg(`Discovered ${repos.length} repositories for '${orgInput.trim()}'. Select the repositories you wish to ingest below:`)
-    setDiscovering(false)
   }
 
   const handleToggleRepo = (url: string) => {
@@ -2940,56 +2670,60 @@ function IngestModal({
 
     setLoading(true)
     try {
-      setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into deterministic AST graph...`)
-      let data: any = null
-      if (API_BASE) {
+      setStatusMsg(`Starting ingestion of ${targetUrls.length} repositories...`)
+      const res = await fetch(`${API_BASE}/api/repos/ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
+      })
+      const startData = await res.json()
+
+      if (startData.status === 'already_running') {
+        setStatusMsg('An ingestion job is already running. Please wait for it to finish.')
+        setLoading(false)
+        return
+      }
+
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_BASE}/api/repos/ingest`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
-          })
-          if (res.ok) {
-            data = await res.json()
+          const statusRes = await fetch(`${API_BASE}/api/repos/ingest/status`)
+          const statusData = await statusRes.json()
+          setStatusMsg(statusData.progress || 'Processing...')
+
+          if (!statusData.running && statusData.complete) {
+            clearInterval(pollInterval)
+            if (statusData.status === 'success') {
+              const repoList = statusData.repositories && statusData.repositories.length > 0
+                ? statusData.repositories
+                : targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
+
+              setIngestSummary({
+                org: orgInput.trim() || 'Custom Repository Set',
+                repositories: repoList,
+                indexed_nodes: statusData.indexed_nodes || 0,
+                cross_repo_edges: statusData.cross_repo_edges || 0,
+                internal_edges: statusData.internal_edges || 0,
+                errors: statusData.errors || [],
+              })
+              setLoading(false)
+              setStatusMsg('')
+              onIngestSuccess()
+            } else if (statusData.status === 'error') {
+              setStatusMsg(`Ingestion failed: ${statusData.error || 'Unknown error'}`)
+              setLoading(false)
+            } else {
+              setStatusMsg(`Ingestion completed with status: ${statusData.status || 'unknown'}`)
+              setLoading(false)
+              onIngestSuccess()
+            }
           }
         } catch {
-          // Backend not reached on static cloud host
+          // Keep polling even if a single status check fails
         }
-      }
-
-      if (data && data.status === 'success') {
-        const repoList = data.repositories && data.repositories.length > 0
-          ? data.repositories
-          : targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
-
-        setIngestSummary({
-          org: orgInput.trim() || 'Custom Repository Set',
-          repositories: repoList,
-          indexed_nodes: data.indexed_nodes || 0,
-          cross_repo_edges: data.cross_repo_edges || 0,
-          internal_edges: data.internal_edges || 0,
-          errors: data.errors || [],
-        })
-        setLoading(false)
-        setStatusMsg('')
-        onIngestSuccess()
-      } else {
-        // Resilient fallback for cloud-hosted frontend (e.g. AWS Amplify)
-        const repoList = targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
-        setIngestSummary({
-          org: orgInput.trim() || 'Custom Repository Set',
-          repositories: repoList,
-          indexed_nodes: repoList.length * 14 + 12,
-          cross_repo_edges: Math.max(1, repoList.length),
-          internal_edges: repoList.length * 18,
-          errors: [],
-        })
-        setLoading(false)
-        setStatusMsg('')
-        onIngestSuccess()
-      }
+      }, 2000)
     } catch (e: any) {
-      setStatusMsg(`Error during ingestion: ${e.message}`)
+      setStatusMsg(`Error starting ingestion: ${e.message}`)
       setLoading(false)
     }
   }
@@ -3661,15 +3395,15 @@ export default function App() {
   const [dataVersion, setDataVersion] = useState(0)
 
   // Live state from backend
-  const [graphNodes, setGraphNodes] = useState<GraphNode[]>(FALLBACK_NODES)
-  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>(FALLBACK_EDGES)
+  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([])
+  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([])
   const [stats, setStats] = useState<SystemStats>({
-    repositories: ['repo_auth_core', 'repo_frontend_portal', 'repo_shared_sdk'],
-    total_symbols: 36,
-    total_edges: 16,
-    cross_repo_edges: 5,
+    repositories: [],
+    total_symbols: 0,
+    total_edges: 0,
+    cross_repo_edges: 0,
     db_engine: 'SQLite WAL + FTS5',
-    runtime_env: 'local',
+    runtime_env: 'aws',
   })
 
   // Target repo scope filter
@@ -3678,7 +3412,6 @@ export default function App() {
 
   // Fetch initial graph & stats on load
   const loadData = useCallback(async () => {
-    if (!API_BASE) return
     try {
       const statsRes = await fetch(`${API_BASE}/api/stats`)
       if (statsRes.ok) {
@@ -3703,7 +3436,6 @@ export default function App() {
   }, [loadData])
 
   const handleReindex = async () => {
-    if (!API_BASE) return
     const res = await fetch(`${API_BASE}/api/repos/reindex`, { method: 'POST' })
     if (res.ok) {
       await loadData()
@@ -3970,7 +3702,7 @@ export default function App() {
 
         {tab === 'benchmarks' && (
           <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
-            <BenchmarksView dataVersion={dataVersion} />
+            <BenchmarksView dataVersion={dataVersion} stats={stats} />
           </div>
         )}
       </main>

@@ -129,28 +129,47 @@ def get_graph():
         return 3
     repos.sort(key=repo_order)
 
-    # Column X offsets for clean multi-repository swimlanes
-    col_width = 320
-    repo_x = {repo: 80 + i * col_width for i, repo in enumerate(repos)}
+    # Column X offsets for clean multi-repository swimlanes with grid layout
+    nodes_by_repo = {r: [] for r in repos}
+    for n in all_nodes:
+        if n.repo in nodes_by_repo:
+            nodes_by_repo[n.repo].append(n)
 
-    # Group nodes by repo and sort by symbol kind (endpoints, classes, functions)
+    # Calculate connected node IDs
+    connected_ids = set()
+    for e in all_edges:
+        connected_ids.add(e.caller_id)
+        connected_ids.add(e.callee_id)
+
     def kind_weight(n):
         st = n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else str(n.symbol_type)
         if st == "endpoint": return 0
         if st == "class": return 1
         return 2
 
-    nodes_by_repo = {r: [] for r in repos}
-    for n in all_nodes:
-        if n.repo in nodes_by_repo:
-            nodes_by_repo[n.repo].append(n)
+    lane_x_offset = 60
+    subcol_width = 205
+    row_height = 42
+    rows_per_col = 18
 
     nodes_out = []
     for r in repos:
-        sorted_nodes = sorted(nodes_by_repo[r], key=lambda x: (kind_weight(x), x.file_path, x.start_line))
-        for idx, n in enumerate(sorted_nodes):
-            x = repo_x.get(r, 100)
-            y = 70 + idx * 52
+        # Prioritize: 1. Endpoints & Connected nodes, 2. Classes, 3. Functions
+        def sort_priority(n):
+            is_conn = 0 if n.id in connected_ids else 1
+            kw = kind_weight(n)
+            return (is_conn, kw, n.file_path or "", n.start_line or 0)
+
+        sorted_nodes = sorted(nodes_by_repo[r], key=sort_priority)
+        display_nodes = sorted_nodes[:72] if len(sorted_nodes) > 72 else sorted_nodes
+
+        num_cols = max((len(display_nodes) + rows_per_col - 1) // rows_per_col, 1)
+
+        for idx, n in enumerate(display_nodes):
+            subcol = idx // rows_per_col
+            row = idx % rows_per_col
+            x = lane_x_offset + subcol * subcol_width
+            y = 70 + row * row_height
 
             stype = n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else str(n.symbol_type)
             kind = "endpoint" if stype == "endpoint" else ("class" if stype == "class" else "function")
@@ -168,6 +187,8 @@ def get_graph():
                 "x": x,
                 "y": y,
             })
+
+        lane_x_offset += num_cols * subcol_width + 70
 
     edges_out = []
     for e in all_edges:
@@ -202,17 +223,6 @@ def reindex_testbed():
         "indexed_nodes": res.get("indexed_nodes", 0),
         "cross_repo_edges": res.get("cross_repo_edges", 0),
         "repositories": res.get("repositories", []),
-    }
-
-
-@app.post("/api/repos/discover-org")
-def discover_organization_repos(req: DiscoverOrgRequest):
-    """Discovers all public repositories for a GitHub organization or user."""
-    repos = ingester.fetch_organization_repos(req.org)
-    return {
-        "status": "success",
-        "org": req.org,
-        "repositories": repos,
     }
 
 
@@ -252,18 +262,89 @@ def generate_cross_repo_diffs(req: AgentRunRequest):
     return res
 
 
+# --- Background ingestion task state ---
+_ingest_state: Dict[str, Any] = {
+    "running": False,
+    "progress": "",
+    "result": None,
+    "error": None,
+}
+
+
+def _run_ingest_sync(urls: List[str], clear_existing: bool):
+    """Runs clone + index in a background thread. Updates _ingest_state as it progresses."""
+    global _ingest_state
+    _ingest_state["running"] = True
+    _ingest_state["progress"] = f"Starting ingestion of {len(urls)} repositories..."
+    _ingest_state["result"] = None
+    _ingest_state["error"] = None
+    try:
+        def progress_cb(stage: str, msg: str, pct: float):
+            _ingest_state["progress"] = msg
+
+        res = ingester.ingest_repositories(
+            urls,
+            agent.tool_manager,
+            clear_existing=clear_existing,
+            progress_cb=progress_cb,
+        )
+        _ingest_state["result"] = res
+        _ingest_state["progress"] = "Ingestion complete."
+    except Exception as e:
+        _ingest_state["error"] = str(e)
+        _ingest_state["progress"] = f"Ingestion failed: {e}"
+    finally:
+        _ingest_state["running"] = False
+
+
 @app.post("/api/repos/ingest")
-def ingest_repositories(req: IngestRequest):
-    """Clones and indexes dynamic GitHub repositories."""
+async def ingest_repositories(req: IngestRequest):
+    """Clones and indexes dynamic GitHub repositories in a background thread.
+    Returns immediately so the UI stays responsive. Poll /api/repos/ingest/status for progress.
+    """
     if not req.urls:
         raise HTTPException(status_code=400, detail="At least one repository URL is required")
 
-    res = ingester.ingest_repositories(
-        req.urls,
-        agent.tool_manager,
-        clear_existing=req.clear_existing,
-    )
-    return res
+    if _ingest_state["running"]:
+        return {
+            "status": "already_running",
+            "message": "An ingestion job is already in progress.",
+            "progress": _ingest_state["progress"],
+        }
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing)
+
+    return {
+        "status": "started",
+        "message": f"Ingestion of {len(req.urls)} repositories started in background. Poll /api/repos/ingest/status for progress.",
+        "progress": _ingest_state["progress"],
+    }
+
+
+@app.get("/api/repos/ingest/status")
+def ingest_status():
+    """Returns the current status of the background ingestion job."""
+    if _ingest_state["result"]:
+        return {
+            "running": _ingest_state["running"],
+            "progress": _ingest_state["progress"],
+            "complete": True,
+            **_ingest_state["result"],
+        }
+    if _ingest_state["error"]:
+        return {
+            "running": False,
+            "progress": _ingest_state["progress"],
+            "complete": True,
+            "status": "error",
+            "error": _ingest_state["error"],
+        }
+    return {
+        "running": _ingest_state["running"],
+        "progress": _ingest_state["progress"],
+        "complete": not _ingest_state["running"] and _ingest_state["result"] is None and _ingest_state["error"] is None,
+    }
 
 
 class DiscoverOrgRequest(BaseModel):
