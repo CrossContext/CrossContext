@@ -49,7 +49,7 @@ app.add_middleware(
 )
 
 # Initialize Agent, Graph Store, Bedrock Client & Diff Generator
-agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
+agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
 store = agent.tool_manager.graph_store
 ingester = GitHubRepoIngester()
 diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
@@ -72,8 +72,8 @@ _bootstrap()
 # --- Pydantic Request Models ---
 class AgentRunRequest(BaseModel):
     query: str
-    env: Optional[str] = "local"
-    model: Optional[str] = "claude-sonnet-4-5"
+    env: Optional[str] = os.getenv("ENV", "aws")
+    model: Optional[str] = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 
 
 class IngestRequest(BaseModel):

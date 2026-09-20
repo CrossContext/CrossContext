@@ -73,10 +73,10 @@ const KIND_BADGES: Record<string, { label: string; color: string; bg: string }> 
 }
 
 const DEFAULT_ENGINE: EngineConfig = {
-  env: 'local',
-  model: 'claude-3-7-sonnet',
-  tokenBudget: 4096,
-  maxDepth: 3,
+  env: 'aws',
+  model: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  tokenBudget: 12000,
+  maxDepth: 4,
   indexStrategy: 'ast',
   cycleDetection: true,
 }
@@ -2459,9 +2459,10 @@ function EngineSettingsSidebar({
                 fontFamily: 'var(--font-mono)', fontSize: 11, borderRadius: 2, outline: 'none',
               }}
             >
-              <option value="claude-3-7-sonnet">Claude 3.7 Sonnet (AWS Bedrock)</option>
-              <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-              <option value="llama-3-3-70b">Llama 3.3 70B (Bedrock)</option>
+              <option value="us.anthropic.claude-sonnet-4-5-20250929-v1:0">Claude Sonnet 4.5 (AWS Bedrock)</option>
+              <option value="us.amazon.nova-pro-v1:0">Amazon Nova Pro (Bedrock)</option>
+              <option value="us.meta.llama3-3-70b-instruct-v1:0">Llama 3.3 70B (Bedrock)</option>
+              <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
               <option value="deterministic-graph-only">Deterministic Graph (Zero-LLM)</option>
             </select>
           ))}

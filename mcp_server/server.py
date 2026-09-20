@@ -19,7 +19,7 @@ from mcp_server.tools import CodeGraphToolManager
 
 # Initialize FastMCP Server
 mcp = FastMCP("CrossContext-CodeGraph-Server")
-manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
+manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
 
 
 @mcp.tool()

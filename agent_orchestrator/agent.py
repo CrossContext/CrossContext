@@ -3,6 +3,7 @@ CrossContext - Autonomous Code Graph Agent Loop
 Orchestrates multi-turn cross-repository reasoning using AWS Strands pattern.
 """
 
+import os
 import time
 import json
 from typing import Dict, Any, List, Optional, Callable
@@ -95,13 +96,15 @@ TOOLS_SCHEMA = [
 
 
 class CrossContextAgent:
-    def __init__(self, db_path: str = "data/crosscontext_graph.db"):
+    def __init__(self, db_path: Optional[str] = None):
+        effective_db = db_path or os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db")
         self.model_provider = ModelProvider()
-        self.tool_manager = CodeGraphToolManager(db_path=db_path)
+        self.tool_manager = CodeGraphToolManager(db_path=effective_db)
         self.session_manager = SessionManager()
+        default_max_depth = int(os.getenv("MAX_GRAPH_TRAVERSAL_DEPTH", "4"))
         self._tool_dispatch = {
             "traverse_call_graph": lambda args: self.tool_manager.traverse_call_graph(
-                args.get("root_symbol", ""), args.get("max_depth", 3)
+                args.get("root_symbol", ""), args.get("max_depth", default_max_depth)
             ),
             "get_symbol_definition": lambda args: self.tool_manager.get_symbol_definition(
                 args.get("symbol_name", ""), args.get("repo")
@@ -128,7 +131,9 @@ class CrossContextAgent:
         Executes the autonomous reasoning loop over multi-repo code context.
         """
         start_time = time.time()
-        guardrails = LifecycleGuardrails(max_tool_calls=8, token_budget=12000)
+        max_tool_calls = int(os.getenv("MAX_TOOL_CALLS_PER_TURN", "10"))
+        token_budget = int(os.getenv("MAX_CONTEXT_TOKEN_BUDGET", "12000"))
+        guardrails = LifecycleGuardrails(max_tool_calls=max_tool_calls, token_budget=token_budget)
 
         if session_id:
             self.session_manager.add_message(session_id, "user", prompt)

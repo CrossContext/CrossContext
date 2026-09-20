@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Generator
 class BedrockClient:
     """Manages Amazon Bedrock Foundation Models and Titan Embeddings."""
 
-    DEFAULT_MODEL = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+    DEFAULT_MODEL = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
     FALLBACK_MODELS = [
         "us.amazon.nova-pro-v1:0",
         "us.meta.llama3-3-70b-instruct-v1:0",
@@ -21,9 +21,9 @@ class BedrockClient:
     DEFAULT_EMBEDDING_MODEL = os.getenv("BEDROCK_EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0")
 
     def __init__(self, region_name: Optional[str] = None):
-        self.region = region_name or os.getenv("AWS_REGION", "us-east-1")
+        self.region = region_name or os.getenv("AWS_REGION", "us-west-2")
         self._client = None
-        self.env = os.getenv("ENV", "local").lower()
+        self.env = os.getenv("ENV", "aws").lower()
 
     @property
     def client(self):
