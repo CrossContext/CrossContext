@@ -202,18 +202,36 @@ The web interface is organized into dedicated functional views:
 
 ## Model Context Protocol (MCP) Integration
 
-CrossContext runs as a compliant MCP server to power tools like Claude Desktop, Cursor, and Windsurf:
+CrossContext functions as a zero-dependency, standards-compliant **Model Context Protocol (MCP)** server over `stdio`. Any AI coding agent—including **Cursor**, **Claude Desktop**, **Windsurf**, or **VS Code Cline**—can connect to CrossContext to query multi-repository call graphs, compute blast radius, and extract exact AST chunks with **74.7% fewer tokens**.
+
+---
+
+### Step 1: Index Your Repositories
+
+Before your AI coding agent can query your codebase, index your local folders or remote GitHub repositories:
 
 ```bash
-python mcp_server/server.py
-```
+# Index local repositories:
+python scripts/index_github_repos.py "/path/to/backend-service" "/path/to/frontend-app"
 
-### Claude Desktop Configuration (`claude_desktop_config.json`)
+# OR index public GitHub repositories directly:
+python scripts/index_github_repos.py "https://github.com/my-org/backend-repo" "https://github.com/my-org/frontend-repo"
+```
+> CrossContext parses AST boundaries across Python, TypeScript/JavaScript, Go, Java, and C/C++, establishing cross-repo contracts in `data/crosscontext_graph.db`.
+
+---
+
+### Step 2: Configure Your Agent or IDE
+
+Add CrossContext to your AI agent's configuration file:
+
+#### 1. In **Cursor** (`.cursor/mcp.json` or Settings $\rightarrow$ Features $\rightarrow$ MCP)
+Create or edit `.cursor/mcp.json` in your workspace root:
 ```json
 {
   "mcpServers": {
     "crosscontext": {
-      "command": "/path/to/CrossContext/.venv/bin/python",
+      "command": "python",
       "args": ["-m", "mcp_server.server"],
       "cwd": "/path/to/CrossContext",
       "env": {
@@ -224,6 +242,73 @@ python mcp_server/server.py
   }
 }
 ```
+
+#### 2. In **Claude Desktop** (`claude_desktop_config.json`)
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "crosscontext": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "/path/to/CrossContext",
+      "env": {
+        "ENV": "local",
+        "SQLITE_DB_PATH": "data/crosscontext_graph.db"
+      }
+    }
+  }
+}
+```
+
+#### 3. In **Windsurf** (`~/.codeium/windsurf/mcp_config.json`)
+```json
+{
+  "mcpServers": {
+    "crosscontext": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "/path/to/CrossContext"
+    }
+  }
+}
+```
+
+#### 4. In **Official MCP Inspector** (Interactive Browser GUI)
+Test and debug tool inputs and outputs interactively:
+```bash
+npx -y @modelcontextprotocol/inspector python -m mcp_server.server
+```
+Navigate to `http://localhost:5173` to test tools and schemas in real-time.
+
+---
+
+### Step 3: Available MCP Tools
+
+Once connected, your AI coding agent will automatically register and dispatch these 5 deterministic tools:
+
+| MCP Tool | Description | Why It Outperforms Grep & Naive RAG |
+| :--- | :--- | :--- |
+| `traverse_call_graph` | Computes full multi-repository blast radius for any symbol or API route across recursion depths. | Maps both upstream callers and downstream consumers in **< 10ms**. Zero hallucinated file paths. |
+| `get_symbol_definition` | Locates exact definition, start/end line bounds, and signature for any function, class, or endpoint. | Pinpoints exact AST boundaries without reading thousands of lines of code. |
+| `get_usage_dependency_links` | Traces cross-repository caller/callee contracts (e.g. frontend API consumer $\leftrightarrow$ backend route provider). | Identifies every external consumer repository that breaks when an API changes. |
+| `get_ast_chunk` | Fetches the complete unbroken syntactic block for a symbol ID. | Delivers code slices at **74.7% fewer tokens** than dumping entire files into prompt context. |
+| `semantic_code_search` | Dense vector search (Amazon Titan v2) with resilient SQLite FTS5 multi-token lexical fallback. | Conceptual intent search matching keywords and semantic meaning across all repos. |
+
+---
+
+### Step 4: Example Agent Prompts
+
+Once configured, simply talk to your coding agent in plain English:
+
+- *"What is the blast radius across our other repositories if I deprecate `/v1/auth/verify`?"*  
+  $\rightarrow$ The agent automatically runs `traverse_call_graph` and lists every affected file and consumer service.
+- *"Where is `verifyUserSession` defined and what backend endpoints does it call?"*  
+  $\rightarrow$ The agent dispatches `get_symbol_definition` and `get_usage_dependency_links`.
+- *"Fetch only the exact implementation of `generateToken`."*  
+  $\rightarrow$ The agent retrieves the discrete AST chunk with zero irrelevant boilerplate.
 
 ---
 
