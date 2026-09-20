@@ -125,14 +125,23 @@ function CrossRepoGraph({
   selectedNode,
   onSelect,
   blastRadiusActive,
+  selectedRepo,
+  onSelectRepo,
 }: {
   nodes: GraphNode[]
   edges: GraphEdge[]
   selectedNode: string | null
   onSelect: (id: string | null) => void
   blastRadiusActive?: boolean
+  selectedRepo?: string | null
+  onSelectRepo?: (repo: string | null) => void
 }) {
-  const [repoFilter, setRepoFilter] = useState<string | null>(null)
+  const [internalRepoFilter, setInternalRepoFilter] = useState<string | null>(null)
+  const repoFilter = selectedRepo !== undefined ? selectedRepo : internalRepoFilter
+  const setRepoFilter = (r: string | null) => {
+    setInternalRepoFilter(r)
+    onSelectRepo?.(r)
+  }
   const [priorityTab, setPriorityTab] = useState<'endpoint' | 'class' | 'function'>('endpoint')
   const [searchQuery, setSearchQuery] = useState('')
   const [showRightPanel, setShowRightPanel] = useState(true)
@@ -306,9 +315,10 @@ function CrossRepoGraph({
 
   // Priority calculations for symbols (Functions, Classes, APIs)
   const priorityMatrix = useMemo(() => {
+    const targetNodes = repoFilter ? nodes.filter(n => n.repo === repoFilter) : nodes
     const counts: Record<string, { inbound: number; outbound: number; crossRepo: boolean }> = {}
 
-    nodes.forEach(n => {
+    targetNodes.forEach(n => {
       counts[n.id] = { inbound: 0, outbound: 0, crossRepo: false }
     })
 
@@ -324,7 +334,7 @@ function CrossRepoGraph({
       }
     })
 
-    const endpoints = nodes
+    const endpoints = targetNodes
       .filter(n => n.kind === 'endpoint')
       .map(n => ({
         ...n,
@@ -335,7 +345,7 @@ function CrossRepoGraph({
       }))
       .sort((a, b) => b.totalRelations - a.totalRelations)
 
-    const classes = nodes
+    const classes = targetNodes
       .filter(n => n.kind === 'class')
       .map(n => ({
         ...n,
@@ -346,7 +356,7 @@ function CrossRepoGraph({
       }))
       .sort((a, b) => b.totalRelations - a.totalRelations)
 
-    const functions = nodes
+    const functions = targetNodes
       .filter(n => n.kind === 'function')
       .map(n => ({
         ...n,
@@ -358,7 +368,7 @@ function CrossRepoGraph({
       .sort((a, b) => b.totalRelations - a.totalRelations)
 
     return { endpoints, classes, functions }
-  }, [nodes, edges])
+  }, [nodes, edges, repoFilter])
 
   // Filter priority list based on active tab & search query
   const activePriorityList = useMemo(() => {
@@ -3815,6 +3825,8 @@ export default function App() {
                   edges={graphEdges}
                   selectedNode={selectedNode}
                   onSelect={setSelectedNode}
+                  selectedRepo={repoName || null}
+                  onSelectRepo={r => setRepoName(r || '')}
                 />
               </div>
             </div>
