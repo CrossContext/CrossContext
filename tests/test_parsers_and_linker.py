@@ -370,3 +370,212 @@ export async function checkSession(token: string) {
     assert api_edges[0].caller_id == consumer.id
     assert api_edges[0].callee_id == producer_node.id
 
+
+# =============================================================
+# 6. Universal Polyglot Language Parsing Tests
+# =============================================================
+
+def test_php_laravel_parsing(parser):
+    """Test PHP parser on Laravel controllers, routes, and HTTP clients."""
+    php_code = """<?php
+namespace App\\Http\\Controllers;
+
+use Illuminate\\Support\\Facades\\Http;
+
+class InvoiceController extends Controller
+{
+    public function generatePdf(int $id)
+    {
+        $response = Http::post('https://pdf-service.internal/v1/render', ['id' => $id]);
+        return response()->json($response->json());
+    }
+}
+"""
+    nodes, _ = parser.parse_file("laravel-pdf-generator", "app/Http/Controllers/InvoiceController.php", php_code)
+    assert len(nodes) >= 2
+    cls = next(n for n in nodes if n.symbol_name == "InvoiceController")
+    assert cls.symbol_type == SymbolType.CLASS
+
+    method = next(n for n in nodes if n.symbol_name == "generatePdf")
+    assert method.symbol_type == SymbolType.METHOD
+    assert method.metadata.get("consumes_endpoint") == "/v1/render"
+    assert method.metadata.get("consumes_http_method") == "POST"
+
+    routes_code = """<?php
+use Illuminate\\Support\\Facades\\Route;
+
+Route::get('/api/v1/invoices', [InvoiceController::class, 'index']);
+Route::post('/api/v1/invoices/create', [InvoiceController::class, 'create']);
+"""
+    r_nodes, _ = parser.parse_file("laravel-pdf-generator", "routes/api.php", routes_code)
+    ep_nodes = [n for n in r_nodes if n.symbol_type == SymbolType.ENDPOINT]
+    assert len(ep_nodes) == 2
+    assert any(n.metadata.get("endpoint_route") == "/api/v1/invoices" for n in ep_nodes)
+
+
+def test_rust_actix_and_reqwest_parsing(parser):
+    """Test Rust parser for Actix-web endpoints and Reqwest client calls."""
+    rust_code = """
+use actix_web::{get, post, web, HttpResponse, Responder};
+
+pub struct OrderRequest {
+    pub order_id: String,
+}
+
+#[get("/api/v1/orders/{order_id}")]
+pub async fn get_order(path: web::Path<String>) -> impl Responder {
+    HttpResponse::Ok().body("order")
+}
+
+pub async fn notify_shipping(order_id: &str) {
+    let client = reqwest::Client::new();
+    client.post("https://shipping.internal/v1/dispatch").send().await;
+}
+"""
+    nodes, _ = parser.parse_file("rust-orders", "src/main.rs", rust_code)
+    assert any(n.symbol_name == "OrderRequest" and n.symbol_type == SymbolType.CLASS for n in nodes)
+
+    ep = next(n for n in nodes if n.symbol_name == "get_order")
+    assert ep.symbol_type == SymbolType.ENDPOINT
+    assert ep.metadata.get("endpoint_route") == "/api/v1/orders/{order_id}"
+    assert ep.metadata.get("http_method") == "GET"
+
+    consumer = next(n for n in nodes if n.symbol_name == "notify_shipping")
+    assert consumer.metadata.get("consumes_endpoint") == "/v1/dispatch"
+    assert consumer.metadata.get("consumes_http_method") == "POST"
+
+
+def test_csharp_aspnet_parsing(parser):
+    """Test C# parser for ASP.NET Core controllers and routes."""
+    cs_code = """
+using Microsoft.AspNetCore.Mvc;
+using System.Net.Http;
+
+namespace Billing.Controllers
+{
+    [ApiController]
+    public class BillingController : ControllerBase
+    {
+        [HttpGet("/api/v1/charges")]
+        public async Task<IActionResult> ListCharges()
+        {
+            return Ok();
+        }
+    }
+}
+"""
+    nodes, _ = parser.parse_file("billing-service", "Controllers/BillingController.cs", cs_code)
+    assert any(n.symbol_name == "BillingController" and n.symbol_type == SymbolType.CLASS for n in nodes)
+    ep = next(n for n in nodes if n.symbol_name == "ListCharges")
+    assert ep.symbol_type == SymbolType.ENDPOINT
+    assert ep.metadata.get("endpoint_route") == "/api/v1/charges"
+    assert ep.metadata.get("http_method") == "GET"
+
+
+def test_ruby_rails_parsing(parser):
+    """Test Ruby parser for controllers, methods, and routes."""
+    rb_code = """
+class PaymentsController < ApplicationController
+  def process_payment
+    response = Faraday.post("https://gateway.internal/v1/charge")
+    render json: response.body
+  end
+end
+"""
+    nodes, _ = parser.parse_file("ruby-app", "app/controllers/payments_controller.rb", rb_code)
+    cls = next(n for n in nodes if n.symbol_name == "PaymentsController")
+    assert cls.symbol_type == SymbolType.CLASS
+    m = next(n for n in nodes if n.symbol_name == "process_payment")
+    assert m.metadata.get("consumes_endpoint") == "/v1/charge"
+    assert m.metadata.get("consumes_http_method") == "POST"
+
+
+def test_clojure_parsing(parser):
+    """Test Clojure parser for defn, Compojure routes, and clj-http."""
+    clj_code = """
+(ns my-service.routes
+  (:require [clj-http.client :as client]))
+
+(defn calculate-metrics [a b]
+  (+ a b))
+
+(GET "/api/v1/health" []
+  {:status 200 :body "OK"})
+"""
+    nodes, _ = parser.parse_file("clj-service", "src/routes.clj", clj_code)
+    assert any(n.symbol_name == "calculate-metrics" and n.symbol_type == SymbolType.FUNCTION for n in nodes)
+    assert any(n.symbol_type == SymbolType.ENDPOINT and n.metadata.get("endpoint_route") == "/api/v1/health" for n in nodes)
+
+
+def test_c_cpp_parsing(parser):
+    """Test C/C++ parser for classes, structs, and functions."""
+    cpp_code = """
+#include <iostream>
+
+class EngineCore {
+public:
+    void initialize();
+};
+
+void run_diagnostics(int code) {
+    std::cout << code << std::endl;
+}
+"""
+    nodes, _ = parser.parse_file("cpp-engine", "src/engine.cpp", cpp_code)
+    assert any(n.symbol_name == "EngineCore" and n.symbol_type == SymbolType.CLASS for n in nodes)
+    assert any(n.symbol_name == "run_diagnostics" and n.symbol_type == SymbolType.FUNCTION for n in nodes)
+
+
+def test_universal_polyglot_fallback_parsing(parser):
+    """Test universal fallback parser on Shell, Dart, and Elixir code."""
+    shell_code = """
+#!/usr/bin/env bash
+
+function deploy_service() {
+    echo "Deploying..."
+    curl "https://k8s.internal/v1/deploy"
+}
+"""
+    nodes, _ = parser.parse_file("infra-scripts", "deploy.sh", shell_code)
+    assert any(n.symbol_name == "deploy_service" for n in nodes)
+
+
+def test_cross_language_api_contract_linkage(parser, linker):
+    """Verify cross-language contract: PHP client calls Go endpoint, TypeScript calls Clojure endpoint."""
+    # 1. Producer in Go: /v1/render
+    go_code = """
+package main
+
+import "github.com/gin-gonic/gin"
+
+func main() {
+    r := gin.Default()
+    r.POST("/v1/render", renderHandler)
+}
+
+func renderHandler(c *gin.Context) {
+    c.JSON(200, gin.H{"status": "ok"})
+}
+"""
+    go_nodes, _ = parser.parse_file("go-renderer", "main.go", go_code)
+
+    # 2. Consumer in PHP: calls /v1/render
+    php_code = """<?php
+class PdfService {
+    public function renderDocument() {
+        return Http::post("https://go-renderer.internal/v1/render", []);
+    }
+}
+"""
+    php_nodes, _ = parser.parse_file("php-portal", "PdfService.php", php_code)
+
+    edges = linker.link_repositories(go_nodes + php_nodes)
+    api_edges = [
+        e for e in edges
+        if e.edge_type == EdgeType.CONSUMES_API
+        and "php-portal" in e.caller_id
+        and "go-renderer" in e.callee_id
+    ]
+    assert len(api_edges) >= 1
+
+

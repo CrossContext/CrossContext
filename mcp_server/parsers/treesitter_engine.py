@@ -45,7 +45,7 @@ class TreeSitterEngine:
         norm_path = file_path.replace("\\", "/").strip("/")
         ext = Path(norm_path).suffix.lstrip(".").lower()
 
-        if ext == "py":
+        if ext in ("py", "pyi"):
             return self._parse_python(repo, norm_path, content)
         elif ext in ("ts", "tsx", "js", "jsx", "mjs", "cjs"):
             return self._parse_typescript_javascript(repo, norm_path, content)
@@ -53,6 +53,18 @@ class TreeSitterEngine:
             return self._parse_go(repo, norm_path, content)
         elif ext == "java":
             return self._parse_java(repo, norm_path, content)
+        elif ext == "php":
+            return self._parse_php(repo, norm_path, content)
+        elif ext == "rs":
+            return self._parse_rust(repo, norm_path, content)
+        elif ext in ("cs", "csx"):
+            return self._parse_csharp(repo, norm_path, content)
+        elif ext == "rb":
+            return self._parse_ruby(repo, norm_path, content)
+        elif ext in ("c", "cpp", "cc", "cxx", "h", "hpp"):
+            return self._parse_c_cpp(repo, norm_path, content)
+        elif ext in ("clj", "cljs", "cljc", "edn"):
+            return self._parse_clojure(repo, norm_path, content)
         else:
             return self._parse_generic(repo, norm_path, content)
 
@@ -62,11 +74,27 @@ class TreeSitterEngine:
         all_edges: List[CodeEdge] = []
         root_path = Path(root_dir)
 
-        valid_extensions = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java"}
+        valid_extensions = {
+            ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+            ".go", ".java", ".php", ".rs", ".cs", ".csx", ".rb",
+            ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
+            ".clj", ".cljs", ".cljc", ".edn",
+            ".kt", ".kts", ".swift", ".scala", ".dart",
+            ".sh", ".bash", ".zsh", ".lua", ".r", ".R",
+            ".pl", ".pm", ".ex", ".exs", ".erl", ".hs",
+            ".jl", ".zig"
+        }
+        ignored_patterns = {
+            ".venv", "venv", "node_modules", "vendor", "__pycache__",
+            ".git", "dist", "build", "target", "bin", "obj", ".gradle",
+            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo"
+        }
+
         for file in root_path.rglob("*"):
             if file.is_file() and file.suffix in valid_extensions:
                 rel = file.relative_to(root_path).as_posix()
-                if any(ignored in rel for ignored in [".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build"]):
+                rel_parts = set(rel.split("/"))
+                if rel_parts.intersection(ignored_patterns):
                     continue
                 try:
                     content = file.read_text(encoding="utf-8", errors="replace")
@@ -660,5 +688,597 @@ class TreeSitterEngine:
 
         return nodes, edges
 
+    @staticmethod
+    def _find_closing_paren(lines: List[str], start_idx: int) -> int:
+        """Finds 1-indexed line number of matching closing parenthesis for Lisp/Clojure forms."""
+        depth = 0
+        found_open = False
+        for i in range(start_idx - 1, len(lines)):
+            line = re.sub(r';.*$', '', lines[i])
+            for ch in line:
+                if ch == '(':
+                    depth += 1
+                    found_open = True
+                elif ch == ')':
+                    depth -= 1
+                    if found_open and depth == 0:
+                        return i + 1
+        return min(start_idx + 40, len(lines))
+
+    @staticmethod
+    def _find_ruby_end(lines: List[str], start_idx: int) -> int:
+        """Finds 1-indexed line number of matching 'end' keyword for Ruby definitions."""
+        depth = 0
+        for i in range(start_idx - 1, len(lines)):
+            line = re.sub(r'#.*$', '', lines[i]).strip()
+            if not line:
+                continue
+            if re.match(r'^(?:class|module|def|if|unless|while|until|for|case)\b', line) or re.search(r'\bdo\s*(?:\|[^|]*\|)?$', line):
+                depth += 1
+            if re.match(r'^end\b', line):
+                depth -= 1
+                if depth <= 0:
+                    return i + 1
+        return min(start_idx + 40, len(lines))
+
+    # -------------------------------------------------------------
+    # PHP Parser Implementation (Laravel, Symfony, Standard PHP)
+    # -------------------------------------------------------------
+    def _parse_php(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        class_pattern = re.compile(r'(?:final\s+|abstract\s+)?(?:class|interface|trait)\s+([a-zA-Z0-9_]+)')
+        method_pattern = re.compile(r'(?:public|protected|private)?\s*(?:static\s+)?function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)')
+        import_pattern = re.compile(r'^\s*use\s+([a-zA-Z0-9_\\]+)')
+        route_pattern = re.compile(r'Route::(?P<verb>get|post|put|delete|patch|options)\s*\(\s*["\']([^"\']+)["\']')
+        http_client_pattern = re.compile(r'(?:Http::|\$client->|\$this->http->)(?P<verb>get|post|put|delete|patch|request)\s*\(\s*["\'](?P<url>[^"\']+)["\']', re.IGNORECASE)
+
+        file_imports = []
+        for line in lines:
+            m = import_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        # Check for route definitions in routes files
+        for idx, line in enumerate(lines, start=1):
+            r_match = route_pattern.search(line)
+            if r_match:
+                verb = r_match.group("verb").upper()
+                route_path = r_match.group(2)
+                end_line = min(idx + 5, len(lines))
+                block = "".join(lines[idx - 1 : end_line])
+                node_name = f"route_{verb.lower()}_{re.sub(r'[^a-zA-Z0-9_]', '_', route_path).strip('_')}"
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, node_name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=node_name,
+                    symbol_type=SymbolType.ENDPOINT,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata={"endpoint_route": route_path, "http_method": verb, "file_imports": file_imports}
+                ))
+
+        for idx, line in enumerate(lines, start=1):
+            c_match = class_pattern.search(line)
+            if c_match:
+                name = c_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            m_match = method_pattern.search(line)
+            if m_match:
+                name = m_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                block = "".join(lines[idx - 1 : end_line])
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                c_client = http_client_pattern.search(block)
+                if c_client:
+                    url = c_client.group("url")
+                    if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                        verb = c_client.group("verb").upper()
+                        if verb == "REQUEST":
+                            verb = "GET"
+                        meta["consumes_endpoint"] = url
+                        meta["consumes_http_method"] = verb
+                        if "://" in url:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(url)
+                            meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                            meta["consumes_endpoint"] = parsed.path or "/"
+
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.METHOD,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
+                ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # Rust Parser Implementation (Actix Web, Axum, Rocket, Reqwest)
+    # -------------------------------------------------------------
+    def _parse_rust(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        type_pattern = re.compile(r'(?:pub(?:\([^\)]+\))?\s+)?(?:struct|enum|trait|union)\s+([a-zA-Z0-9_]+)')
+        fn_pattern = re.compile(r'(?:pub(?:\([^\)]+\))?\s+)?(?:async\s+)?(?:unsafe\s+)?fn\s+([a-zA-Z0-9_]+)\s*(?:<[^>]+>)?\s*\((.*?)\)')
+        actix_route = re.compile(r'#\[(?P<verb>get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']\s*\)\]')
+        reqwest_call = re.compile(r'(?:reqwest::|client\.)(?P<verb>get|post|put|delete|patch)\s*\(\s*["\'](?P<url>[^"\']+)["\']')
+        use_pattern = re.compile(r'^\s*use\s+([a-zA-Z0-9_:]+)')
+
+        file_imports = []
+        for line in lines:
+            m = use_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            t_match = type_pattern.search(line)
+            if t_match:
+                name = t_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            f_match = fn_pattern.search(line)
+            if f_match:
+                name = f_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                block = "".join(lines[idx - 1 : end_line])
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                # Check previous lines for Actix/Rocket route attribute
+                context_prev = "".join(lines[max(0, idx - 4) : idx])
+                r_match = actix_route.search(context_prev) or actix_route.search(line)
+                is_endpoint = False
+                if r_match:
+                    is_endpoint = True
+                    meta["endpoint_route"] = r_match.group(2)
+                    meta["http_method"] = r_match.group("verb").upper()
+
+                c_call = reqwest_call.search(block)
+                if c_call:
+                    url = c_call.group("url")
+                    if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                        meta["consumes_endpoint"] = url
+                        meta["consumes_http_method"] = c_call.group("verb").upper()
+                        if "://" in url:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(url)
+                            meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                            meta["consumes_endpoint"] = parsed.path or "/"
+
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.ENDPOINT if is_endpoint else SymbolType.FUNCTION,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
+                ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # C# / .NET Parser Implementation (ASP.NET Core, HttpClient)
+    # -------------------------------------------------------------
+    def _parse_csharp(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        class_pattern = re.compile(r'(?:public|internal|private)?\s*(?:static\s+|abstract\s+|partial\s+)?(?:class|interface|struct|record)\s+([a-zA-Z0-9_]+)')
+        method_pattern = re.compile(r'(?:public|internal|protected|private)?\s*(?:static\s+|async\s+|virtual\s+|override\s+)*(?:Task(?:<[^>]+>)?|[a-zA-Z0-9_<>,\[\]]+)\s+([a-zA-Z0-9_]+)\s*\((.*?)\)')
+        aspnet_route = re.compile(r'\[(?P<verb>HttpGet|HttpPost|HttpPut|HttpDelete|HttpPatch|Route)\s*(?:\(\s*["\']([^"\']+)["\']\s*\))?\]')
+        http_client = re.compile(r'(?:\.|\b)(?P<verb>GetAsync|PostAsync|PutAsync|DeleteAsync)\s*\(\s*["\'](?P<url>[^"\']+)["\']')
+        using_pattern = re.compile(r'^\s*using\s+([a-zA-Z0-9_.]+);')
+
+        file_imports = []
+        for line in lines:
+            m = using_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            c_match = class_pattern.search(line)
+            if c_match:
+                name = c_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            m_match = method_pattern.search(line)
+            if m_match:
+                name = m_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                block = "".join(lines[idx - 1 : end_line])
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                context_prev = "".join(lines[max(0, idx - 4) : idx])
+                r_match = aspnet_route.search(context_prev) or aspnet_route.search(line)
+                is_endpoint = False
+                if r_match:
+                    is_endpoint = True
+                    verb_raw = r_match.group("verb")
+                    meta["http_method"] = verb_raw.replace("Http", "").upper() if verb_raw != "Route" else "GET"
+                    meta["endpoint_route"] = r_match.group(2) or "/"
+
+                c_call = http_client.search(block)
+                if c_call:
+                    url = c_call.group("url")
+                    if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                        verb = c_call.group("verb").replace("Async", "").upper()
+                        meta["consumes_endpoint"] = url
+                        meta["consumes_http_method"] = verb
+                        if "://" in url:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(url)
+                            meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                            meta["consumes_endpoint"] = parsed.path or "/"
+
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.ENDPOINT if is_endpoint else SymbolType.METHOD,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
+                ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # Ruby Parser Implementation (Rails, Sinatra, Faraday, Net::HTTP)
+    # -------------------------------------------------------------
+    def _parse_ruby(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        class_pattern = re.compile(r'^\s*(?:class|module)\s+([a-zA-Z0-9_:]+)')
+        def_pattern = re.compile(r'^\s*def\s+([a-zA-Z0-9_!?=]+)')
+        route_pattern = re.compile(r'^\s*(?P<verb>get|post|put|delete|patch)\s+["\']([^"\']+)["\']')
+        http_client = re.compile(r'(?:Faraday|Net::HTTP|HTTParty)\.(?P<verb>get|post|put|delete)\s*\(?\s*["\'](?P<url>[^"\']+)["\']')
+        req_pattern = re.compile(r'^\s*require(?:_relative)?\s+["\']([^"\']+)["\']')
+
+        file_imports = []
+        for line in lines:
+            m = req_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            c_match = class_pattern.search(line)
+            if c_match:
+                name = c_match.group(1)
+                end_line = self._find_ruby_end(lines, idx)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            d_match = def_pattern.search(line)
+            if d_match:
+                name = d_match.group(1)
+                end_line = self._find_ruby_end(lines, idx)
+                block = "".join(lines[idx - 1 : end_line])
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                c_call = http_client.search(block)
+                if c_call:
+                    url = c_call.group("url")
+                    if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                        meta["consumes_endpoint"] = url
+                        meta["consumes_http_method"] = c_call.group("verb").upper()
+                        if "://" in url:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(url)
+                            meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                            meta["consumes_endpoint"] = parsed.path or "/"
+
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.METHOD,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
+                ))
+
+            r_match = route_pattern.search(line)
+            if r_match:
+                verb = r_match.group("verb").upper()
+                route_path = r_match.group(2)
+                end_line = min(idx + 5, len(lines))
+                node_name = f"route_{verb.lower()}_{re.sub(r'[^a-zA-Z0-9_]', '_', route_path).strip('_')}"
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, node_name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=node_name,
+                    symbol_type=SymbolType.ENDPOINT,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content="".join(lines[idx - 1 : end_line]),
+                    metadata={"endpoint_route": route_path, "http_method": verb, "file_imports": file_imports}
+                ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # C / C++ Parser Implementation
+    # -------------------------------------------------------------
+    def _parse_c_cpp(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        type_pattern = re.compile(r'^\s*(?:class|struct)\s+([a-zA-Z0-9_]+)')
+        fn_pattern = re.compile(r'^\s*(?:[a-zA-Z0-9_<>,*&:]+\s+)+([a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?:const)?\s*(?:\{|;)')
+        inc_pattern = re.compile(r'^\s*#include\s*[<"]([^>"]+)[>"]')
+
+        file_imports = []
+        for line in lines:
+            m = inc_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            t_match = type_pattern.search(line)
+            if t_match and ("{" in line or (idx < len(lines) and "{" in lines[idx])):
+                name = t_match.group(1)
+                end_line = self._find_closing_brace(lines, idx)
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            f_match = fn_pattern.search(line)
+            if f_match and "{" in line:
+                name = f_match.group(1)
+                if name not in ("if", "for", "while", "switch", "catch"):
+                    end_line = self._find_closing_brace(lines, idx)
+                    nodes.append(CodeNode(
+                        id=CodeNode.generate_id(repo, file_path, name, idx),
+                        repo=repo,
+                        file_path=file_path,
+                        symbol_name=name,
+                        symbol_type=SymbolType.FUNCTION,
+                        start_line=idx,
+                        end_line=end_line,
+                        signature=line.strip(),
+                        code_content="".join(lines[idx - 1 : end_line]),
+                        metadata={"file_imports": file_imports}
+                    ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # Clojure Parser Implementation (Compojure, Ring, clj-http)
+    # -------------------------------------------------------------
+    def _parse_clojure(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        defn_pattern = re.compile(r'\(\s*(?:defn|defn-|def|defmacro)\s+([a-zA-Z0-9_\-\.\*\+\!\?]+)')
+        route_pattern = re.compile(r'\(\s*(?P<verb>GET|POST|PUT|DELETE|PATCH)\s+["\']([^"\']+)["\']')
+        http_client = re.compile(r'\(\s*(?:client/|http/)(?P<verb>get|post|put|delete)\s+["\'](?P<url>[^"\']+)["\']')
+        ns_pattern = re.compile(r'\(\s*ns\s+([a-zA-Z0-9_\-\.]+)')
+
+        file_imports = []
+        for line in lines:
+            m = ns_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            d_match = defn_pattern.search(line)
+            if d_match:
+                name = d_match.group(1)
+                end_line = self._find_closing_paren(lines, idx)
+                block = "".join(lines[idx - 1 : end_line])
+                meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                c_call = http_client.search(block)
+                if c_call:
+                    url = c_call.group("url")
+                    if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                        meta["consumes_endpoint"] = url
+                        meta["consumes_http_method"] = c_call.group("verb").upper()
+                        if "://" in url:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(url)
+                            meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                            meta["consumes_endpoint"] = parsed.path or "/"
+
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.FUNCTION,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content=block,
+                    metadata=meta
+                ))
+
+            r_match = route_pattern.search(line)
+            if r_match:
+                verb = r_match.group("verb").upper()
+                route_path = r_match.group(2)
+                end_line = self._find_closing_paren(lines, idx)
+                node_name = f"route_{verb.lower()}_{re.sub(r'[^a-zA-Z0-9_]', '_', route_path).strip('_')}"
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, node_name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=node_name,
+                    symbol_type=SymbolType.ENDPOINT,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    code_content="".join(lines[idx - 1 : end_line]),
+                    metadata={"endpoint_route": route_path, "http_method": verb, "file_imports": file_imports}
+                ))
+
+        return nodes, edges
+
+    # -------------------------------------------------------------
+    # Universal Polyglot Fallback Parser
+    # -------------------------------------------------------------
     def _parse_generic(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        return [], []
+        """
+        Universal fallback parser extracting structural symbols, endpoints,
+        and HTTP consumer dependencies across any programming language.
+        """
+        nodes: List[CodeNode] = []
+        edges: List[CodeEdge] = []
+        lines = content.splitlines(keepends=True)
+
+        type_pattern = re.compile(r'^\s*(?:class|struct|interface|type|module|trait|enum)\s+([a-zA-Z0-9_]+)')
+        fn_pattern = re.compile(r'^\s*(?:def|func|fn|function|fun|sub|proc|task|void|int|string|bool)\s+([a-zA-Z0-9_]+)\s*(?:\(|$)', re.IGNORECASE)
+        assign_fn = re.compile(r'^\s*(?:let|const|var|val)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>)', re.IGNORECASE)
+        route_pattern = re.compile(r'(?:@Route|@Get|@Post|@Put|@Delete|router\.(?:get|post|put|delete)|app\.(?:get|post|put|delete))\s*\(\s*["\']([^"\']+)["\']', re.IGNORECASE)
+        http_client = re.compile(r'(?:fetch|\.get|\.post|\.put|\.delete)\s*\(\s*["\'](?P<url>[^"\']+)["\']', re.IGNORECASE)
+        import_pattern = re.compile(r'^\s*(?:import|use|require|include|open|from)\s+([a-zA-Z0-9_\.\-\/]+)')
+
+        file_imports = []
+        for line in lines:
+            m = import_pattern.search(line)
+            if m:
+                file_imports.append(m.group(1))
+
+        for idx, line in enumerate(lines, start=1):
+            t_match = type_pattern.search(line)
+            if t_match:
+                name = t_match.group(1)
+                end_line = self._find_closing_brace(lines, idx) if "{" in "".join(lines[idx-1:idx+2]) else min(idx + 20, len(lines))
+                nodes.append(CodeNode(
+                    id=CodeNode.generate_id(repo, file_path, name, idx),
+                    repo=repo,
+                    file_path=file_path,
+                    symbol_name=name,
+                    symbol_type=SymbolType.CLASS,
+                    start_line=idx,
+                    end_line=end_line,
+                    signature=line.strip(),
+                    metadata={"file_imports": file_imports}
+                ))
+
+            f_match = fn_pattern.search(line) or assign_fn.search(line)
+            if f_match:
+                name = f_match.group(1)
+                if name.lower() not in ("if", "for", "while", "switch", "catch", "return", "var", "let", "const"):
+                    end_line = self._find_closing_brace(lines, idx) if "{" in "".join(lines[idx-1:idx+2]) else min(idx + 25, len(lines))
+                    block = "".join(lines[idx - 1 : end_line])
+                    meta: Dict[str, Any] = {"file_imports": file_imports}
+
+                    r_match = route_pattern.search(line)
+                    is_endpoint = False
+                    if r_match:
+                        is_endpoint = True
+                        meta["endpoint_route"] = r_match.group(1)
+                        verb_m = re.search(r'(get|post|put|delete|patch)', line, re.IGNORECASE)
+                        meta["http_method"] = verb_m.group(1).upper() if verb_m else "GET"
+
+                    c_call = http_client.search(block)
+                    if c_call:
+                        url = c_call.group("url")
+                        if not any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".css", ".svg", ".json", ".js"]):
+                            verb_m = re.search(r'(get|post|put|delete|patch)', block, re.IGNORECASE)
+                            meta["consumes_endpoint"] = url
+                            meta["consumes_http_method"] = verb_m.group(1).upper() if verb_m else "GET"
+                            if "://" in url:
+                                from urllib.parse import urlparse
+                                parsed = urlparse(url)
+                                meta["target_base_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                                meta["consumes_endpoint"] = parsed.path or "/"
+
+                    nodes.append(CodeNode(
+                        id=CodeNode.generate_id(repo, file_path, name, idx),
+                        repo=repo,
+                        file_path=file_path,
+                        symbol_name=name,
+                        symbol_type=SymbolType.ENDPOINT if is_endpoint else SymbolType.FUNCTION,
+                        start_line=idx,
+                        end_line=end_line,
+                        signature=line.strip(),
+                        code_content=block,
+                        metadata=meta
+                    ))
+
+        return nodes, edges
+
