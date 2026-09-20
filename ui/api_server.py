@@ -125,28 +125,47 @@ def get_graph():
         return 3
     repos.sort(key=repo_order)
 
-    # Column X offsets for clean multi-repository swimlanes
-    col_width = 320
-    repo_x = {repo: 80 + i * col_width for i, repo in enumerate(repos)}
+    # Column X offsets for clean multi-repository swimlanes with grid layout
+    nodes_by_repo = {r: [] for r in repos}
+    for n in all_nodes:
+        if n.repo in nodes_by_repo:
+            nodes_by_repo[n.repo].append(n)
 
-    # Group nodes by repo and sort by symbol kind (endpoints, classes, functions)
+    # Calculate connected node IDs
+    connected_ids = set()
+    for e in all_edges:
+        connected_ids.add(e.caller_id)
+        connected_ids.add(e.callee_id)
+
     def kind_weight(n):
         st = n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else str(n.symbol_type)
         if st == "endpoint": return 0
         if st == "class": return 1
         return 2
 
-    nodes_by_repo = {r: [] for r in repos}
-    for n in all_nodes:
-        if n.repo in nodes_by_repo:
-            nodes_by_repo[n.repo].append(n)
+    lane_x_offset = 60
+    subcol_width = 205
+    row_height = 42
+    rows_per_col = 18
 
     nodes_out = []
     for r in repos:
-        sorted_nodes = sorted(nodes_by_repo[r], key=lambda x: (kind_weight(x), x.file_path, x.start_line))
-        for idx, n in enumerate(sorted_nodes):
-            x = repo_x.get(r, 100)
-            y = 70 + idx * 52
+        # Prioritize: 1. Endpoints & Connected nodes, 2. Classes, 3. Functions
+        def sort_priority(n):
+            is_conn = 0 if n.id in connected_ids else 1
+            kw = kind_weight(n)
+            return (is_conn, kw, n.file_path or "", n.start_line or 0)
+
+        sorted_nodes = sorted(nodes_by_repo[r], key=sort_priority)
+        display_nodes = sorted_nodes[:72] if len(sorted_nodes) > 72 else sorted_nodes
+
+        num_cols = max((len(display_nodes) + rows_per_col - 1) // rows_per_col, 1)
+
+        for idx, n in enumerate(display_nodes):
+            subcol = idx // rows_per_col
+            row = idx % rows_per_col
+            x = lane_x_offset + subcol * subcol_width
+            y = 70 + row * row_height
 
             stype = n.symbol_type.value if isinstance(n.symbol_type, SymbolType) else str(n.symbol_type)
             kind = "endpoint" if stype == "endpoint" else ("class" if stype == "class" else "function")
@@ -164,6 +183,8 @@ def get_graph():
                 "x": x,
                 "y": y,
             })
+
+        lane_x_offset += num_cols * subcol_width + 70
 
     edges_out = []
     for e in all_edges:
