@@ -518,10 +518,10 @@ function CrossRepoGraph({
                 </div>
               </div>
 
-              {/* Scrollable Tags Container with visible scrollbar */}
+              {/* Scrollable Tags Container with visible scrollbar (3 rows) */}
               <div style={{
                 display: 'flex', flexWrap: 'wrap', gap: 4,
-                maxHeight: 125, overflowY: 'scroll',
+                maxHeight: 70, overflowY: 'scroll',
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#a3a3a3 #f0f0f0',
                 paddingRight: 4,
