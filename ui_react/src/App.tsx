@@ -125,12 +125,14 @@ function CrossRepoGraph({
   selectedNode,
   onSelect,
   blastRadiusActive,
+  onOpenIngest,
 }: {
   nodes: GraphNode[]
   edges: GraphEdge[]
   selectedNode: string | null
   onSelect: (id: string | null) => void
   blastRadiusActive?: boolean
+  onOpenIngest?: (org?: string) => void
 }) {
   const [repoFilter, setRepoFilter] = useState<string | null>(null)
   const [priorityTab, setPriorityTab] = useState<'endpoint' | 'class' | 'function'>('endpoint')
@@ -576,6 +578,303 @@ function CrossRepoGraph({
             backgroundPosition: `${pan.x}px ${pan.y}px`,
           }}
         >
+          {/* Onboarding Instructions & Recommended Organizations for Empty State */}
+          {nodes.length === 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              maxWidth: 720,
+              width: '90%',
+              background: 'white',
+              border: '1px solid var(--color-border-bright)',
+              borderRadius: 6,
+              padding: '24px 28px',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.08)',
+              zIndex: 30,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+            }}>
+              {/* Header */}
+              <div style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: 12 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--color-primary)',
+                  fontWeight: 600,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}>
+                  Cross-Repository Code Intelligence Engine
+                </div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111' }}>
+                  Welcome to CrossContext
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                  No repositories are currently indexed. Follow the instructions below to get started, or select one of the top multi-repository organizations to analyze.
+                </p>
+              </div>
+
+              {/* 3 Step Instructions */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <div style={{
+                  background: '#f9fafb',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                    1. Ingest Repositories
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                    Specify a GitHub organization or custom repository URLs to parse and index AST symbols, dependencies, and API endpoints.
+                  </div>
+                </div>
+
+                <div style={{
+                  background: '#f9fafb',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                    2. Explore Architecture
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                    Trace cross-repository calls and dependencies. Click any node to compute blast radius and upstream caller impact.
+                  </div>
+                </div>
+
+                <div style={{
+                  background: '#f9fafb',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#111' }}>
+                    3. Direct AI Agent
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                    Query symbol definitions, caller hierarchies, and architectural diagnostics through native MCP tools in the agent console.
+                  </div>
+                </div>
+              </div>
+
+              {/* Top 3 Famous Multi-Repo Organizations */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--color-text-dim)',
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                }}>
+                  Recommended Multi-Repository Organizations:
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* Meshery */}
+                  <div
+                    onClick={() => onOpenIngest?.('meshery')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'white',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#2563eb'
+                      e.currentTarget.style.background = '#f0f7ff'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'var(--color-border)'
+                      e.currentTarget.style.background = 'white'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>
+                          meshery
+                        </span>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
+                          (Cloud Native Management and Service Mesh Plane)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Includes meshery, meshery-operator, meshery-adapter-library, schemas
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('meshery'); }}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        background: '#1d4ed8',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ingest meshery
+                    </button>
+                  </div>
+
+                  {/* Pallets */}
+                  <div
+                    onClick={() => onOpenIngest?.('pallets')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'white',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#059669'
+                      e.currentTarget.style.background = '#f0fdf4'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'var(--color-border)'
+                      e.currentTarget.style.background = 'white'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#047857' }}>
+                          pallets
+                        </span>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
+                          (Python Web Framework Ecosystem)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Includes flask, werkzeug, jinja, click, markupsafe
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('pallets'); }}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        background: '#047857',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ingest pallets
+                    </button>
+                  </div>
+
+                  {/* Encode */}
+                  <div
+                    onClick={() => onOpenIngest?.('encode')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'white',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#7c3aed'
+                      e.currentTarget.style.background = '#faf5ff'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'var(--color-border)'
+                      e.currentTarget.style.background = 'white'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#6d28d9' }}>
+                          encode
+                        </span>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
+                          (High-Performance Async Python Stack)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Includes httpx, starlette, uvicorn, databases
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('encode'); }}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        background: '#6d28d9',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ingest encode
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Manual Ingest Action Footer */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
+                <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>
+                  Or ingest any custom GitHub organization or repository URLs:
+                </span>
+                <button
+                  onClick={() => onOpenIngest?.()}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    background: '#111',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  + Ingest Repositories
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Blast Radius Heatmap Banner */}
           {selectedNode && directCallers.size > 0 && (
             <div style={{
@@ -802,46 +1101,48 @@ function CrossRepoGraph({
           </div>
 
           {/* Floating 2D HUD Navigation Controls */}
-          <div style={{
-            position: 'absolute',
-            bottom: 12,
-            left: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            background: 'white',
-            border: '1px solid var(--color-border-bright)',
-            borderRadius: 3,
-            padding: '3px 6px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-            zIndex: 20,
-          }}>
-            <button
-              onClick={() => setZoom(z => Math.min(z * 1.2, 2.4))}
-              style={hudBtnStyle}
-              title="Zoom in (+)"
-            >
-              +
-            </button>
-            <button
-              onClick={() => setZoom(z => Math.max(z * 0.8, 0.3))}
-              style={hudBtnStyle}
-              title="Zoom out (-)"
-            >
-              -
-            </button>
-            <div style={{ width: 1, height: 12, background: 'var(--color-border)' }} />
-            <button
-              onClick={resetView}
-              style={{ ...hudBtnStyle, width: 'auto', padding: '0 6px', fontSize: 9 }}
-              title="Fit to screen & center"
-            >
-              fit
-            </button>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', marginLeft: 4 }}>
-              {Math.round(zoom * 100)}%
-            </span>
-          </div>
+          {nodes.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'white',
+              border: '1px solid var(--color-border-bright)',
+              borderRadius: 3,
+              padding: '3px 6px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              zIndex: 20,
+            }}>
+              <button
+                onClick={() => setZoom(z => Math.min(z * 1.2, 2.4))}
+                style={hudBtnStyle}
+                title="Zoom in (+)"
+              >
+                +
+              </button>
+              <button
+                onClick={() => setZoom(z => Math.max(z * 0.8, 0.3))}
+                style={hudBtnStyle}
+                title="Zoom out (-)"
+              >
+                -
+              </button>
+              <div style={{ width: 1, height: 12, background: 'var(--color-border)' }} />
+              <button
+                onClick={resetView}
+                style={{ ...hudBtnStyle, width: 'auto', padding: '0 6px', fontSize: 9 }}
+                title="Fit to screen & center"
+              >
+                fit
+              </button>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', marginLeft: 4 }}>
+                {Math.round(zoom * 100)}%
+              </span>
+            </div>
+          )}
 
           {/* Selected Node Inspector Card */}
           {selectedNode && (() => {
@@ -859,12 +1160,13 @@ function CrossRepoGraph({
                 fontFamily: 'var(--font-mono)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
                 zIndex: 25,
               }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderLeft: `3px solid ${col}`, paddingLeft: 8, marginBottom: 8 }}>
-                  <div>
-                    <div style={{ color: '#111', fontWeight: 600, fontSize: 12 }}>{n.label}</div>
-                    <div style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
-                      {n.repo.replace('repo_', '')} • {n.file_path || 'file'}:{n.start_line || 1}
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: 1, background: col,
+                    }} />
+                    <span style={{ fontWeight: 700, color: '#111', fontSize: 12 }}>{n.label}</span>
+                    <span style={{ color: 'var(--color-text-dim)', fontSize: 9 }}>({n.repo.replace('repo_', '')})</span>
                   </div>
                   <button
                     onClick={() => onSelect(null)}
@@ -908,26 +1210,34 @@ function CrossRepoGraph({
           borderTop: '1px solid var(--color-border)', flexShrink: 0, alignItems: 'center',
           background: 'white',
         }}>
-          {[
-            { kind: 'calls', color: '#a3a3a3', dash: false },
-            { kind: 'http (cross-repo)', color: '#dc2626', dash: true },
-            { kind: 'imports', color: '#2563eb', dash: false },
-          ].map(({ kind, color, dash }) => (
-            <span key={kind} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-              <svg width={16} height={6}>
-                <line x1={0} y1={3} x2={16} y2={3} stroke={color} strokeWidth={1.5} strokeDasharray={dash ? '3 2' : undefined} />
-              </svg>
-              {kind}
+          {nodes.length > 0 ? (
+            <>
+              {[
+                { kind: 'calls', color: '#a3a3a3', dash: false },
+                { kind: 'http (cross-repo)', color: '#dc2626', dash: true },
+                { kind: 'imports', color: '#2563eb', dash: false },
+              ].map(({ kind, color, dash }) => (
+                <span key={kind} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                  <svg width={16} height={6}>
+                    <line x1={0} y1={3} x2={16} y2={3} stroke={color} strokeWidth={1.5} strokeDasharray={dash ? '3 2' : undefined} />
+                  </svg>
+                  {kind}
+                </span>
+              ))}
+              <span style={{ marginLeft: 'auto', color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                {visibleNodes.length} symbols • {visibleEdges.length} edges • Pan & Zoom
+              </span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+              0 repositories indexed. Follow instructions above to ingest your first codebase.
             </span>
-          ))}
-          <span style={{ marginLeft: 'auto', color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-            {visibleNodes.length} symbols • {visibleEdges.length} edges • Pan & Zoom
-          </span>
+          )}
         </div>
       </div>
 
       {/* Right Side: Convention & Relation Priority Panel */}
-      {showRightPanel && (
+      {showRightPanel && nodes.length > 0 && (
         <div style={{
           width: 290,
           borderLeft: '1px solid var(--color-border)',
@@ -2757,14 +3067,16 @@ function IngestModal({
   onClose,
   onIngestSuccess,
   onNavigateToBlueprint,
+  initialOrg,
 }: {
   open: boolean
   onClose: () => void
   onIngestSuccess: () => void
   onNavigateToBlueprint?: () => void
+  initialOrg?: string
 }) {
   const [mode, setMode] = useState<'org' | 'custom'>('org')
-  const [orgInput, setOrgInput] = useState('')
+  const [orgInput, setOrgInput] = useState(initialOrg || '')
   const [customUrls, setCustomUrls] = useState('')
   const [wipeExisting, setWipeExisting] = useState(true)
   const [includeAll, setIncludeAll] = useState(true)
@@ -2775,6 +3087,13 @@ function IngestModal({
   const [repoSearchFilter, setRepoSearchFilter] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
   const [ingestSummary, setIngestSummary] = useState<IngestSummaryData | null>(null)
+
+  useEffect(() => {
+    if (open && initialOrg) {
+      setOrgInput(initialOrg)
+      setMode('org')
+    }
+  }, [open, initialOrg])
 
   if (!open) return null
 
@@ -3587,6 +3906,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('agent')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [ingestModalOpen, setIngestModalOpen] = useState(false)
+  const [ingestInitialOrg, setIngestInitialOrg] = useState('')
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [engineConfig, setEngineConfig] = useState<EngineConfig>(DEFAULT_ENGINE)
   const [dataVersion, setDataVersion] = useState(0)
@@ -3612,8 +3932,8 @@ export default function App() {
       const graphRes = await fetch(`${API_BASE}/api/graph`)
       if (graphRes.ok) {
         const g = await graphRes.json()
-        if (g.nodes && g.nodes.length > 0) setGraphNodes(g.nodes)
-        if (g.edges && g.edges.length > 0) setGraphEdges(g.edges)
+        setGraphNodes(g.nodes || [])
+        setGraphEdges(g.edges || [])
       }
       setDataVersion(v => v + 1)
     } catch {
@@ -3697,7 +4017,10 @@ export default function App() {
           </div>
           <div style={{ width: 1, height: 18, background: 'var(--color-border)' }} />
           <button
-            onClick={() => setIngestModalOpen(true)}
+            onClick={() => {
+              setIngestInitialOrg('')
+              setIngestModalOpen(true)
+            }}
             style={{
               padding: '4px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
               background: '#111', border: '1px solid #111',
@@ -3748,6 +4071,7 @@ export default function App() {
                   <div
                     onClick={() => {
                       if (availableRepos.length === 0) {
+                        setIngestInitialOrg('')
                         setIngestModalOpen(true)
                       } else {
                         setRepoDropdownOpen(v => !v)
@@ -3872,6 +4196,10 @@ export default function App() {
                   edges={graphEdges}
                   selectedNode={selectedNode}
                   onSelect={setSelectedNode}
+                  onOpenIngest={(org) => {
+                    setIngestInitialOrg(org || '')
+                    setIngestModalOpen(true)
+                  }}
                 />
               </div>
             </div>
@@ -3900,7 +4228,11 @@ export default function App() {
       {/* Ingestion Modal */}
       <IngestModal
         open={ingestModalOpen}
-        onClose={() => setIngestModalOpen(false)}
+        initialOrg={ingestInitialOrg}
+        onClose={() => {
+          setIngestModalOpen(false)
+          setIngestInitialOrg('')
+        }}
         onIngestSuccess={async () => {
           await loadData()
         }}
