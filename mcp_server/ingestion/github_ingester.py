@@ -39,17 +39,31 @@ class GitHubRepoIngester:
         name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', name)
         return name
 
-    @staticmethod
-    def fetch_organization_repos(org_name: str) -> List[str]:
+    _ORG_CACHE: Dict[str, List[str]] = {}
+
+    @classmethod
+    def fetch_organization_repos(cls, org_name: str) -> List[str]:
         """
         Discovers and returns all repository clone URLs for any given GitHub organization or user account.
         Supports:
-          - Org names: 'pallets', 'meshery', 'fastapi', 'tiangolo', 'kubernetes'
-          - Org/Repo URLs: 'https://github.com/orgs/meshery/repositories', 'https://github.com/pallets'
-        Uses GitHub REST API first (including GITHUB_TOKEN from env if available),
-        falling back to HTML extraction across org repositories and user profile tabs.
+          - Org names: 'Project-HAMi', 'pallets', 'fastapi', 'kubernetes'
+          - Org/Repo URLs: 'https://github.com/orgs/Project-HAMi/repositories', 'https://github.com/Project-HAMi'
+          - Direct Repo URLs: 'https://github.com/Project-HAMi/HAMi'
+        Uses cached responses and GitHub REST API with resilient SSL context.
         """
-        clean_org = org_name.strip().rstrip("/")
+        raw_clean = org_name.strip().rstrip("/")
+        if not raw_clean:
+            return []
+
+        # Check if direct single repository URL was provided
+        if "github.com/" in raw_clean:
+            path_parts = raw_clean.split("github.com/")[-1].strip("/").split("/")
+            if len(path_parts) == 2 and path_parts[0] not in ("orgs", "users"):
+                # e.g. https://github.com/Project-HAMi/HAMi
+                repo_url = f"https://github.com/{path_parts[0]}/{path_parts[1].replace('.git', '')}.git"
+                return [repo_url]
+
+        clean_org = raw_clean
         if "github.com/" in clean_org:
             clean_org = clean_org.split("github.com/")[-1]
             clean_org = re.sub(r'^(?:orgs|users)/', '', clean_org)
@@ -58,6 +72,11 @@ class GitHubRepoIngester:
 
         if not clean_org:
             return []
+
+        # Return cached discovery result if available
+        cache_key = clean_org.lower()
+        if cache_key in cls._ORG_CACHE and cls._ORG_CACHE[cache_key]:
+            return list(cls._ORG_CACHE[cache_key])
 
         import json
         import ssl
@@ -85,7 +104,7 @@ class GitHubRepoIngester:
             except Exception:
                 pass
 
-        # 1. Official GitHub REST API
+        # 1. Official GitHub REST API (Try Org first, then User)
         api_urls = [
             f"https://api.github.com/orgs/{clean_org}/repos?per_page=100&sort=pushed",
             f"https://api.github.com/users/{clean_org}/repos?per_page=100&sort=pushed"
@@ -94,17 +113,21 @@ class GitHubRepoIngester:
             try:
                 req = urllib.request.Request(api_url)
                 req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+                req.add_header("Accept", "application/vnd.github.v3+json")
                 if token:
                     req.add_header("Authorization", f"Bearer {token}")
-                with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
+                with urllib.request.urlopen(req, timeout=4, context=ssl_ctx) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode("utf-8"))
                         if isinstance(data, list) and data:
-                            return [r["clone_url"] for r in data if "clone_url" in r]
+                            results = [r["clone_url"] for r in data if "clone_url" in r]
+                            if results:
+                                cls._ORG_CACHE[cache_key] = results
+                                return results
             except Exception:
                 continue
 
-        # 2. Resilient Fallback: Scrape public repositories via urllib
+        # 2. Fast Scraping Fallback via urllib
         page_urls = [
             f"https://github.com/orgs/{clean_org}/repositories",
             f"https://github.com/{clean_org}?tab=repositories",
@@ -120,7 +143,7 @@ class GitHubRepoIngester:
             try:
                 req = urllib.request.Request(p_url)
                 req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
+                with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
                     html = resp.read().decode("utf-8", errors="ignore")
                     matches = re.findall(rf'href=[\"\']/{clean_org}/([^/\#\?\"\'\s]+)[\"\']', html, re.IGNORECASE)
                     seen = []
@@ -129,7 +152,9 @@ class GitHubRepoIngester:
                         if m_clean.lower() not in ignored_names and not m_clean.startswith(".") and m_clean not in seen:
                             seen.append(m_clean)
                     if seen:
-                        return [f"https://github.com/{clean_org}/{r}.git" for r in seen]
+                        results = [f"https://github.com/{clean_org}/{r}.git" for r in seen]
+                        cls._ORG_CACHE[cache_key] = results
+                        return results
             except Exception:
                 continue
 

@@ -981,7 +981,6 @@ const hudBtnStyle: React.CSSProperties = {
 function AgentPanel({
   onNodeSelect,
   selectedNode,
-  orgUrl,
   repoName,
   engineConfig,
   nodes,
@@ -989,7 +988,6 @@ function AgentPanel({
 }: {
   onNodeSelect: (id: string | null) => void
   selectedNode: string | null
-  orgUrl: string
   repoName: string
   engineConfig: EngineConfig
   nodes: GraphNode[]
@@ -1126,26 +1124,16 @@ function AgentPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Context Strip */}
-      {(orgUrl || repoName) && (
+      {/* Scope Badge if filtered */}
+      {repoName && (
         <div style={{
           padding: '6px 14px', borderBottom: '1px solid var(--color-border)',
-          display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
           background: 'var(--color-surface)',
         }}>
-          {orgUrl && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
-              {orgUrl.replace('https://', '')}
-            </span>
-          )}
-          {orgUrl && repoName && (
-            <span style={{ color: 'var(--color-border-strong)', fontSize: 10 }}>/</span>
-          )}
-          {repoName && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#111', fontWeight: 600 }}>
-              {repoName}
-            </span>
-          )}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)' }}>
+            scope: <span style={{ color: '#111', fontWeight: 600 }}>{repoName}</span>
+          </span>
         </div>
       )}
 
@@ -2510,7 +2498,10 @@ function IngestModal({
     }
   }
 
+  const isBusy = discovering || loading
+
   const handleCloseModal = () => {
+    if (isBusy) return
     setIngestSummary(null)
     setDiscoveredRepos([])
     setSelectedOrgRepos([])
@@ -2519,6 +2510,7 @@ function IngestModal({
   }
 
   const handleGoToBlueprint = () => {
+    if (isBusy) return
     setIngestSummary(null)
     setDiscoveredRepos([])
     setSelectedOrgRepos([])
@@ -2548,7 +2540,13 @@ function IngestModal({
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111' }}>
             {ingestSummary ? 'Codebase Ingestion & Indexing Summary' : 'Ingest Dynamic GitHub Codebase'}
           </span>
-          <button onClick={handleCloseModal} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer' }}>✕</button>
+          <button
+            onClick={handleCloseModal}
+            disabled={isBusy}
+            style={{ background: 'none', border: 'none', fontSize: 13, cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : '#111' }}
+          >
+            ✕
+          </button>
         </div>
 
         {ingestSummary ? (
@@ -2624,12 +2622,15 @@ function IngestModal({
               ].map(m => (
                 <button
                   key={m.id}
+                  disabled={isBusy}
                   onClick={() => setMode(m.id as any)}
                   style={{
                     flex: 1, padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: 11,
                     background: mode === m.id ? '#111' : 'var(--color-surface)',
                     color: mode === m.id ? 'white' : 'var(--color-text-muted)',
-                    border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                    border: '1px solid var(--color-border)', borderRadius: 2,
+                    cursor: isBusy ? 'not-allowed' : 'pointer',
+                    opacity: isBusy && mode !== m.id ? 0.6 : 1,
                   }}
                 >
                   {m.label}
@@ -2646,22 +2647,25 @@ function IngestModal({
                   <div style={{ display: 'flex', gap: 6 }}>
                     <input
                       value={orgInput}
+                      disabled={isBusy}
                       onChange={e => setOrgInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleDiscoverOrg()}
+                      onKeyDown={e => e.key === 'Enter' && !isBusy && handleDiscoverOrg()}
                       placeholder="e.g. Project-HAMi, pallets, fastapi, or https://github.com/Project-HAMi"
                       style={{
                         flex: 1, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                         border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                        background: isBusy ? 'var(--color-surface-2)' : 'white',
+                        cursor: isBusy ? 'not-allowed' : 'text',
                       }}
                     />
                     <button
                       onClick={handleDiscoverOrg}
-                      disabled={discovering}
+                      disabled={isBusy}
                       style={{
                         padding: '7px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
                         background: '#111', color: 'white', border: 'none', borderRadius: 2,
-                        cursor: discovering ? 'not-allowed' : 'pointer', fontWeight: 600,
-                        whiteSpace: 'nowrap',
+                        cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
+                        whiteSpace: 'nowrap', opacity: isBusy ? 0.7 : 1,
                       }}
                     >
                       {discovering ? 'Discovering...' : 'Discover Repos'}
@@ -2683,27 +2687,33 @@ function IngestModal({
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button
                           onClick={handleSelectAllDiscovered}
+                          disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
                           All ({discoveredRepos.length})
                         </button>
                         <button
                           onClick={() => handleSelectTopN(5)}
+                          disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
                           Top 5
                         </button>
                         <button
                           onClick={handleClearAllDiscovered}
+                          disabled={isBusy}
                           style={{
                             padding: '2px 6px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                            background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                            cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.5 : 1,
                           }}
                         >
                           Clear
@@ -2714,11 +2724,14 @@ function IngestModal({
                     {/* Filter Input for Repos */}
                     <input
                       value={repoSearchFilter}
+                      disabled={isBusy}
                       onChange={e => setRepoSearchFilter(e.target.value)}
                       placeholder="Filter discovered repositories..."
                       style={{
                         width: '100%', padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                        border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none', background: 'white',
+                        border: '1px solid var(--color-border)', borderRadius: 2, outline: 'none',
+                        background: isBusy ? 'var(--color-surface-2)' : 'white',
+                        cursor: isBusy ? 'not-allowed' : 'text',
                       }}
                     />
 
@@ -2733,21 +2746,24 @@ function IngestModal({
                         return (
                           <div
                             key={url}
-                            onClick={() => handleToggleRepo(url)}
+                            onClick={() => !isBusy && handleToggleRepo(url)}
                             style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              padding: '5px 8px', borderRadius: 2, cursor: 'pointer',
+                              padding: '5px 8px', borderRadius: 2,
+                              cursor: isBusy ? 'not-allowed' : 'pointer',
                               background: isChecked ? 'white' : 'transparent',
                               border: `1px solid ${isChecked ? 'var(--color-border-bright)' : 'transparent'}`,
                               transition: 'background 0.15s ease',
+                              opacity: isBusy ? 0.7 : 1,
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
+                                disabled={isBusy}
                                 onChange={() => {}} // Handled by outer div
-                                style={{ cursor: 'pointer', accentColor: '#111' }}
+                                style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
                               />
                               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: isChecked ? 600 : 400, color: '#111' }}>
                                 {repoName}
@@ -2770,18 +2786,27 @@ function IngestModal({
                 </div>
                 <textarea
                   value={customUrls}
+                  disabled={isBusy}
                   onChange={e => setCustomUrls(e.target.value)}
                   placeholder="https://github.com/Project-HAMi/HAMi&#10;https://github.com/Project-HAMi/HAMi-core&#10;https://github.com/Project-HAMi/HAMi-WebUI"
                   style={{
                     width: '100%', height: 110, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                     border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
+                    background: isBusy ? 'var(--color-surface-2)' : 'white',
+                    cursor: isBusy ? 'not-allowed' : 'text',
                   }}
                 />
               </div>
             )}
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="checkbox" checked={wipeExisting} onChange={e => setWipeExisting(e.target.checked)} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1 }}>
+              <input
+                type="checkbox"
+                checked={wipeExisting}
+                disabled={isBusy}
+                onChange={e => setWipeExisting(e.target.checked)}
+                style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+              />
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
                 Wipe existing graph & replace
               </span>
@@ -2826,9 +2851,11 @@ function IngestModal({
             <>
               <button
                 onClick={handleCloseModal}
+                disabled={isBusy}
                 style={{
                   padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, cursor: 'pointer',
+                  background: 'white', border: '1px solid var(--color-border)', borderRadius: 2,
+                  cursor: isBusy ? 'not-allowed' : 'pointer', color: isBusy ? 'var(--color-text-dim)' : '#111',
                 }}
               >
                 Cancel
@@ -2836,10 +2863,12 @@ function IngestModal({
               {mode === 'org' && discoveredRepos.length === 0 ? (
                 <button
                   onClick={handleDiscoverOrg}
-                  disabled={discovering}
+                  disabled={isBusy}
                   style={{
                     padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: discovering ? 'not-allowed' : 'pointer', fontWeight: 600,
+                    background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                    cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
+                    opacity: isBusy ? 0.7 : 1,
                   }}
                 >
                   {discovering ? 'Discovering Repositories...' : 'Discover Repositories'}
@@ -2847,10 +2876,12 @@ function IngestModal({
               ) : (
                 <button
                   onClick={handleStartIngest}
-                  disabled={loading || (mode === 'org' && selectedOrgRepos.length === 0)}
+                  disabled={isBusy || (mode === 'org' && selectedOrgRepos.length === 0)}
                   style={{
                     padding: '6px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                    background: '#111', color: 'white', border: 'none', borderRadius: 2, cursor: loading || (mode === 'org' && selectedOrgRepos.length === 0) ? 'not-allowed' : 'pointer', fontWeight: 600,
+                    background: '#111', color: 'white', border: 'none', borderRadius: 2,
+                    cursor: isBusy || (mode === 'org' && selectedOrgRepos.length === 0) ? 'not-allowed' : 'pointer',
+                    fontWeight: 600, opacity: isBusy ? 0.7 : 1,
                   }}
                 >
                   {loading
@@ -3139,8 +3170,7 @@ export default function App() {
     runtime_env: 'local',
   })
 
-  // Target org / repo
-  const [orgUrl, setOrgUrl] = useState('https://github.com/abhayrajjais01/CrossContext')
+  // Target repo scope filter
   const [repoName, setRepoName] = useState('')
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false)
 
@@ -3270,78 +3300,116 @@ export default function App() {
           <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', height: '100%', overflow: 'hidden' }}>
             {/* Left Column: Directive & Execution */}
             <div style={{ borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {/* Target Repo Inputs */}
+              {/* Streamlined Scope Selector Toolbar */}
               <div style={{
-                padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
-                flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
+                padding: '8px 14px', borderBottom: '1px solid var(--color-border)',
+                flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4,
+                background: 'var(--color-surface)',
               }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 4 }}>
-                    TARGET REPO URL / SCOPE
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1, fontWeight: 600 }}>
+                    REPOSITORY CONTEXT SCOPE
                   </div>
-                  <input
-                    value={orgUrl}
-                    onChange={e => { setOrgUrl(e.target.value); setRepoName('') }}
-                    placeholder="https://github.com/org/repo"
-                    style={{
-                      width: '100%', padding: '5px 9px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                      color: '#111', borderRadius: 2, outline: 'none',
-                    }}
-                  />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-muted)',
+                    background: 'white', border: '1px solid var(--color-border)', borderRadius: 2, padding: '1px 5px',
+                  }}>
+                    {availableRepos.length} {availableRepos.length === 1 ? 'repo' : 'repos'} indexed
+                  </span>
                 </div>
 
                 {/* Scope selector */}
                 <div style={{ position: 'relative' }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 4 }}>
-                    SCOPE FILTER <span style={{ color: 'var(--color-border-strong)' }}>(optional)</span>
-                  </div>
                   <div
-                    onClick={() => availableRepos.length > 0 && setRepoDropdownOpen(v => !v)}
+                    onClick={() => {
+                      if (availableRepos.length === 0) {
+                        setIngestModalOpen(true)
+                      } else {
+                        setRepoDropdownOpen(v => !v)
+                      }
+                    }}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '5px 9px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                      background: 'white', border: '1px solid var(--color-border-bright)',
                       color: repoName ? '#111' : 'var(--color-text-dim)',
-                      borderRadius: 2, cursor: availableRepos.length > 0 ? 'pointer' : 'default',
-                      userSelect: 'none',
+                      borderRadius: 2, cursor: 'pointer', userSelect: 'none',
                     }}
                   >
-                    <span>{repoName || 'all repositories'}</span>
-                    {availableRepos.length > 0 && (
-                      <svg width={10} height={6} viewBox="0 0 10 6" style={{ flexShrink: 0 }}>
-                        <path d="M1 1l4 4 4-4" stroke="var(--color-border-strong)" strokeWidth={1.5} fill="none" strokeLinecap="round" />
-                      </svg>
-                    )}
+                    <span style={{ fontWeight: repoName ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {availableRepos.length === 0
+                        ? 'No repos indexed (click to ingest)'
+                        : repoName
+                        ? repoName
+                        : 'All Repositories (cross-repo context)'}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {repoName && (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setRepoName('')
+                            setRepoDropdownOpen(false)
+                          }}
+                          style={{
+                            background: 'none', border: 'none', padding: '0 2px',
+                            cursor: 'pointer', fontSize: 10, color: 'var(--color-text-muted)',
+                          }}
+                          title="Reset to all repositories"
+                        >
+                          ✕
+                        </button>
+                      )}
+                      {availableRepos.length > 0 && (
+                        <svg width={10} height={6} viewBox="0 0 10 6" style={{ flexShrink: 0, transform: repoDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
+                          <path d="M1 1l4 4 4-4" stroke="var(--color-border-strong)" strokeWidth={1.5} fill="none" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </div>
                   </div>
+
                   {repoDropdownOpen && availableRepos.length > 0 && (
                     <div style={{
                       position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
                       background: 'white', border: '1px solid var(--color-border)',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.08)', marginTop: 2, borderRadius: 2,
+                      maxHeight: 200, overflowY: 'auto',
                     }}>
                       <div
                         onClick={() => { setRepoName(''); setRepoDropdownOpen(false) }}
                         style={{
                           padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                          color: 'var(--color-text-muted)', cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
+                          color: !repoName ? '#111' : 'var(--color-text-muted)',
+                          fontWeight: !repoName ? 600 : 400,
+                          cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
+                          background: !repoName ? 'var(--color-surface-2)' : 'white',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         }}
                       >
-                        all repositories
+                        <span>All Repositories (cross-repo context)</span>
+                        {!repoName && <span style={{ fontSize: 9, color: '#16a34a', fontWeight: 700 }}>ACTIVE</span>}
                       </div>
-                      {availableRepos.map(r => (
-                        <div
-                          key={r}
-                          onClick={() => { setRepoName(r); setRepoDropdownOpen(false) }}
-                          style={{
-                            padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                            color: '#111', cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
-                            background: r === repoName ? 'var(--color-surface-2)' : 'white',
-                          }}
-                        >
-                          {r}
-                        </div>
-                      ))}
+                      {availableRepos.map(r => {
+                        const count = graphNodes.filter(n => n.repo === r).length
+                        const isSelected = r === repoName
+                        return (
+                          <div
+                            key={r}
+                            onClick={() => { setRepoName(r); setRepoDropdownOpen(false) }}
+                            style={{
+                              padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                              color: '#111', cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
+                              background: isSelected ? 'var(--color-surface-2)' : 'white',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            }}
+                          >
+                            <span style={{ fontWeight: isSelected ? 600 : 400 }}>{r}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)' }}>
+                              {count} symbols
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -3352,7 +3420,6 @@ export default function App() {
                 <AgentPanel
                   onNodeSelect={setSelectedNode}
                   selectedNode={selectedNode}
-                  orgUrl={orgUrl}
                   repoName={repoName}
                   engineConfig={engineConfig}
                   nodes={graphNodes}
