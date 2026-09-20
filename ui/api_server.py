@@ -354,5 +354,5 @@ if DIST_PATH.is_dir():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
-    print(f"🚀 Starting CrossContext API & Web Server on http://localhost:{port}")
+    print(f"Starting CrossContext API & Web Server on http://localhost:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
