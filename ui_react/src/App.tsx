@@ -848,7 +848,7 @@ function CrossRepoGraph({
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = 'var(--color-green)'
+                      e.currentTarget.style.borderColor = 'var(--color-blue)'
                       e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
@@ -858,7 +858,7 @@ function CrossRepoGraph({
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-green)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-blue)' }}>
                           django
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -875,7 +875,7 @@ function CrossRepoGraph({
                         padding: '4px 10px',
                         fontSize: 10,
                         fontFamily: 'var(--font-mono)',
-                        background: '#047857',
+                        background: '#1d4ed8',
                         color: 'white',
                         border: 'none',
                         borderRadius: 3,
@@ -902,7 +902,7 @@ function CrossRepoGraph({
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = 'var(--color-orange)'
+                      e.currentTarget.style.borderColor = 'var(--color-blue)'
                       e.currentTarget.style.background = 'var(--color-surface-2)'
                     }}
                     onMouseLeave={e => {
@@ -912,7 +912,7 @@ function CrossRepoGraph({
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-orange)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--color-blue)' }}>
                           vlc (videolan)
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
@@ -929,7 +929,7 @@ function CrossRepoGraph({
                         padding: '4px 10px',
                         fontSize: 10,
                         fontFamily: 'var(--font-mono)',
-                        background: '#b45309',
+                        background: '#1d4ed8',
                         color: 'white',
                         border: 'none',
                         borderRadius: 3,
@@ -1617,6 +1617,7 @@ function AgentPanel({
 }) {
   const [query, setQuery] = useState('')
   const [running, setRunning] = useState(false)
+  const [thinkingStatus, setThinkingStatus] = useState('ContextBot is thinking...')
   const [playgroundKindTab, setPlaygroundKindTab] = useState<'endpoint' | 'class' | 'function'>('endpoint')
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([])
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -1717,6 +1718,12 @@ function AgentPanel({
       q.toLowerCase().includes('what is') ||
       q.toLowerCase().includes('how does') ||
       q.toLowerCase().includes('how do')
+
+    if (nodes.length === 0 || isConceptual) {
+      setThinkingStatus('ContextBot is thinking...')
+    } else {
+      setThinkingStatus('ContextBot is analyzing multi-repository AST graph...')
+    }
 
     // If 0 repos are indexed and task requires a codebase, guide to ingest
     if (nodes.length === 0 && !isConceptual) {
@@ -2180,12 +2187,18 @@ function AgentPanel({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{
-                    width: 14, height: 14, borderRadius: 2,
+                    width: 16, height: 16, borderRadius: 3,
                     background: 'var(--color-blue)', color: 'white',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 8, fontWeight: 700,
+                    flexShrink: 0,
                   }}>
-                    C
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="10" rx="2"/>
+                      <circle cx="12" cy="5" r="2"/>
+                      <path d="M12 7v4"/>
+                      <line x1="8" y1="16" x2="8" y2="16"/>
+                      <line x1="16" y1="16" x2="16" y2="16"/>
+                    </svg>
                   </span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--color-text)' }}>
                     ContextBot
@@ -2301,14 +2314,29 @@ function AgentPanel({
             flexDirection: 'column',
             gap: 6,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{
-                width: 6, height: 6, borderRadius: '50%',
+                width: 16, height: 16, borderRadius: 3,
+                background: 'var(--color-blue)', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="10" rx="2"/>
+                  <circle cx="12" cy="5" r="2"/>
+                  <path d="M12 7v4"/>
+                  <line x1="8" y1="16" x2="8" y2="16"/>
+                  <line x1="16" y1="16" x2="16" y2="16"/>
+                </svg>
+              </span>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%',
                 background: 'var(--color-blue)',
                 animation: 'pulse 1.2s infinite',
+                marginRight: 2,
               }} />
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                ContextBot is analyzing multi-repository AST graph...
+                {thinkingStatus}
               </span>
             </div>
           </div>
