@@ -81,6 +81,10 @@ class IngestRequest(BaseModel):
     clear_existing: bool = True
 
 
+class DiscoverOrgRequest(BaseModel):
+    org: str
+
+
 # --- API Routes ---
 
 @app.get("/api/aws/status")
@@ -198,6 +202,17 @@ def reindex_testbed():
         "indexed_nodes": res.get("indexed_nodes", 0),
         "cross_repo_edges": res.get("cross_repo_edges", 0),
         "repositories": res.get("repositories", []),
+    }
+
+
+@app.post("/api/repos/discover-org")
+def discover_organization_repos(req: DiscoverOrgRequest):
+    """Discovers all public repositories for a GitHub organization or user."""
+    repos = ingester.fetch_organization_repos(req.org)
+    return {
+        "status": "success",
+        "org": req.org,
+        "repositories": repos,
     }
 
 
