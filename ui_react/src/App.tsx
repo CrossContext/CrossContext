@@ -137,8 +137,14 @@ function CrossRepoGraph({
   const [searchQuery, setSearchQuery] = useState('')
   const [showRightPanel, setShowRightPanel] = useState(true)
   const [showScopeList, setShowScopeList] = useState(false)
+  const [repoSearch, setRepoSearch] = useState('')
 
   const repos = useMemo(() => Array.from(new Set(nodes.map(n => n.repo))), [nodes])
+  const filteredRepos = useMemo(() => {
+    if (!repoSearch.trim()) return repos
+    const q = repoSearch.toLowerCase().trim()
+    return repos.filter(r => r.toLowerCase().includes(q))
+  }, [repos, repoSearch])
 
   // 2D Pan and Zoom State
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 40, y: 30 })
@@ -468,34 +474,85 @@ function CrossRepoGraph({
             </div>
           </div>
 
-          {/* Expandable Scrollable Scope Tags Box (Max Height 110px to never flood screen) */}
+          {/* Expandable Scrollable Scope Tags Box with Search & Visible Scrollbar */}
           {showScopeList && repos.length > 0 && (
             <div style={{
-              display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 12px 8px',
-              maxHeight: 110, overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px 10px',
               background: '#fcfcfc', borderTop: '1px solid var(--color-border)',
             }}>
-              {repos.map(r => {
-                const col = getRepoColor(r).main
-                const active = repoFilter === r
-                const count = nodes.filter(n => n.repo === r).length
-                return (
-                  <button
-                    key={r}
-                    onClick={() => setRepoFilter(active ? null : r)}
-                    title={`${count} AST symbols in ${r.replace('repo_', '')}`}
+              {/* Search Bar & Visible Scroll Counter Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ position: 'relative', width: 220 }}>
+                  <input
+                    type="text"
+                    placeholder={`Search ${repos.length} repositories...`}
+                    value={repoSearch}
+                    onChange={e => setRepoSearch(e.target.value)}
                     style={{
-                      padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                      background: active ? col : 'white',
-                      color: active ? 'white' : 'var(--color-text-muted)',
-                      border: `1px solid ${active ? col : 'var(--color-border)'}`,
-                      borderRadius: 2, cursor: 'pointer',
+                      width: '100%',
+                      padding: '3px 20px 3px 7px',
+                      fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      border: '1px solid var(--color-border-bright)',
+                      borderRadius: 2,
+                      background: 'white',
+                      color: '#111',
+                      outline: 'none',
                     }}
-                  >
-                    {r.replace('repo_', '')} ({count} sym)
-                  </button>
-                )
-              })}
+                  />
+                  {repoSearch && (
+                    <span
+                      onClick={() => setRepoSearch('')}
+                      style={{
+                        position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 12, color: 'var(--color-text-dim)', cursor: 'pointer', lineHeight: 1,
+                      }}
+                      title="Clear search"
+                    >
+                      &times;
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)' }}>
+                  Showing {filteredRepos.length} of {repos.length} repos • scroll to browse all &darr;
+                </div>
+              </div>
+
+              {/* Scrollable Tags Container with visible scrollbar */}
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: 4,
+                maxHeight: 125, overflowY: 'scroll',
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#a3a3a3 #f0f0f0',
+                paddingRight: 4,
+              }}>
+                {filteredRepos.map(r => {
+                  const col = getRepoColor(r).main
+                  const active = repoFilter === r
+                  const count = nodes.filter(n => n.repo === r).length
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => setRepoFilter(active ? null : r)}
+                      title={`${count} AST symbols in ${r.replace('repo_', '')}`}
+                      style={{
+                        padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                        background: active ? col : 'white',
+                        color: active ? 'white' : 'var(--color-text-muted)',
+                        border: `1px solid ${active ? col : 'var(--color-border)'}`,
+                        borderRadius: 2, cursor: 'pointer',
+                      }}
+                    >
+                      {r.replace('repo_', '')} ({count} sym)
+                    </button>
+                  )
+                })}
+                {filteredRepos.length === 0 && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', padding: '6px 0' }}>
+                    No repositories matching "{repoSearch}"
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
