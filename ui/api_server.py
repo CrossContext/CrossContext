@@ -423,6 +423,16 @@ def get_file_content(repo: str, file_path: str):
 @app.get("/api/benchmarks")
 def get_benchmarks():
     """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics."""
+    all_nodes = store.get_all_nodes()
+    if not all_nodes:
+        return {
+            "empty": True,
+            "message": "No repositories currently indexed. Ingest a multi-repository codebase to generate comparative benchmarks.",
+            "repoqa": None,
+            "codescale": None,
+            "summary_table": [],
+        }
+
     res1 = run_repoqa_benchmark(store=store)
     res2 = run_codescale_benchmark(store=store)
 

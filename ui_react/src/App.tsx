@@ -2008,7 +2008,15 @@ function AgentPanel({
 
 // ── Benchmarks View ───────────────────────────────────────────────────────────
 
-function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: SystemStats }) {
+function BenchmarksView({
+  dataVersion,
+  stats,
+  onOpenIngest,
+}: {
+  dataVersion?: number
+  stats?: SystemStats
+  onOpenIngest?: (org?: string) => void
+}) {
   const [liveBench, setLiveBench] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -2093,6 +2101,8 @@ function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: 
     }, 450)
   }
 
+  const isEmpty = liveBench?.empty || (!stats || stats.repositories.length === 0)
+
   // Derived dynamic metrics
   const tokenRedPct = liveBench?.repoqa?.metrics?.token_reduction_pct
     ? `${liveBench.repoqa.metrics.token_reduction_pct}%`
@@ -2114,7 +2124,7 @@ function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: 
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 1.5 }}>
               QUANTITATIVE BENCHMARK & EVALUATION ENGINE
             </span>
-            {lastEvaluatedAt && (
+            {lastEvaluatedAt && !isEmpty && (
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 9, color: '#16a34a',
                 background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1px 5px', borderRadius: 2,
@@ -2130,18 +2140,20 @@ function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: 
             Empirically evaluated on RepoQA (Needle-in-a-Haystack) and CodeScaleBench (Cross-Repo Dependency Tracing).
           </p>
         </div>
-        <button
-          onClick={fetchLiveBenchmarks}
-          disabled={loading}
-          style={{
-            padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
-            background: loading ? 'var(--color-surface-2)' : '#111', color: 'white',
-            border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          {loading ? `running suite (${progress}%)...` : '↻ Run Live Evaluation Suite'}
-        </button>
+        {!isEmpty && (
+          <button
+            onClick={fetchLiveBenchmarks}
+            disabled={loading}
+            style={{
+              padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 11,
+              background: loading ? 'var(--color-surface-2)' : '#111', color: 'white',
+              border: 'none', borderRadius: 2, cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            {loading ? `running suite (${progress}%)...` : '↻ Run Live Evaluation Suite'}
+          </button>
+        )}
       </div>
 
       {/* Progress Bar (Visible during run) */}
@@ -2150,6 +2162,107 @@ function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: 
           <div style={{ height: '100%', width: `${progress}%`, background: '#111', transition: 'width 0.2s ease-in-out' }} />
         </div>
       )}
+
+      {isEmpty && !loading ? (
+        <div style={{
+          padding: '48px 32px',
+          background: 'white',
+          border: '1px solid var(--color-border)',
+          borderRadius: 4,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 14,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+        }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--color-text-dim)',
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+          }}>
+            No Repositories Indexed for Benchmarking
+          </div>
+          <h3 style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: '#111',
+            fontFamily: 'var(--font-mono)',
+          }}>
+            Evaluation Suite Requires Indexed Codebase
+          </h3>
+          <p style={{
+            margin: 0,
+            maxWidth: 560,
+            color: 'var(--color-text-muted)',
+            fontSize: 12,
+            lineHeight: 1.6,
+            fontFamily: 'var(--font-mono)',
+          }}>
+            Quantitative AST vs. RAG comparisons (precision, token reduction, and multi-hop cross-repo traversal) run dynamically against your indexed repositories. Ingest any multi-repository organization to run the empirical suite.
+          </p>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button
+              onClick={() => onOpenIngest?.()}
+              style={{
+                padding: '8px 18px',
+                fontSize: 11,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 600,
+                background: '#111',
+                color: 'white',
+                border: 'none',
+                borderRadius: 3,
+                cursor: 'pointer',
+              }}
+            >
+              + Ingest Repositories
+            </button>
+            <button
+              onClick={() => onOpenIngest?.('meshery')}
+              style={{
+                padding: '8px 16px',
+                fontSize: 11,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 600,
+                background: '#f0f7ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                borderRadius: 3,
+                cursor: 'pointer',
+              }}
+            >
+              Try meshery (Recommended)
+            </button>
+          </div>
+
+          <div style={{
+            marginTop: 16,
+            padding: '12px 16px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 3,
+            maxWidth: 560,
+            width: '100%',
+            textAlign: 'left',
+          }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#111', marginBottom: 6 }}>
+              RECOMMENDED ORGANIZATIONS:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+              <div>• <strong>meshery</strong>: Cloud Native Service Mesh Plane</div>
+              <div>• <strong>kubernetes</strong>: Container Orchestration Stack</div>
+              <div>• <strong>django</strong>: High-level Python Web Framework</div>
+              <div>• <strong>vlc</strong>: Portable Multimedia Framework (videolan)</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
 
       {/* Top Metric Cards (Dynamic from live evaluation) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -2465,6 +2578,8 @@ function BenchmarksView({ dataVersion, stats }: { dataVersion?: number; stats?: 
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   )
@@ -4361,7 +4476,14 @@ export default function App() {
 
         {tab === 'benchmarks' && (
           <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
-            <BenchmarksView dataVersion={dataVersion} stats={stats} />
+            <BenchmarksView
+              dataVersion={dataVersion}
+              stats={stats}
+              onOpenIngest={(org?: string) => {
+                setIngestInitialOrg(org || '')
+                setIngestModalOpen(true)
+              }}
+            />
           </div>
         )}
       </main>
