@@ -62,7 +62,7 @@ class TreeSitterEngine:
         elif ext == "rb":
             return self._parse_ruby(repo, norm_path, content)
         elif ext in ("c", "cpp", "cc", "cxx", "h", "hpp"):
-            return self._parse_c_cpp(repo, norm_path, content)
+            return self._parse_cpp(repo, norm_path, content)
         elif ext in ("clj", "cljs", "cljc", "edn"):
             return self._parse_clojure(repo, norm_path, content)
         else:
@@ -87,7 +87,7 @@ class TreeSitterEngine:
         ignored_patterns = {
             ".venv", "venv", "node_modules", "vendor", "__pycache__",
             ".git", "dist", "build", "target", "bin", "obj", ".gradle",
-            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo"
+            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo", "third_party", "deps"
         }
 
         for file in root_path.rglob("*"):
@@ -1089,59 +1089,74 @@ class TreeSitterEngine:
         return nodes, edges
 
     # -------------------------------------------------------------
-    # C / C++ Parser Implementation
     # -------------------------------------------------------------
-    def _parse_c_cpp(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+    # C / C++ Parser Implementation (Functions, Classes, Structs, Includes)
+    # -------------------------------------------------------------
+    def _parse_cpp(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Parses C and C++ source files (functions, methods, classes, structs, and includes)."""
         nodes: List[CodeNode] = []
         edges: List[CodeEdge] = []
         lines = content.splitlines(keepends=True)
 
-        type_pattern = re.compile(r'^\s*(?:class|struct)\s+([a-zA-Z0-9_]+)')
-        fn_pattern = re.compile(r'^\s*(?:[a-zA-Z0-9_<>,*&:]+\s+)+([a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?:const)?\s*(?:\{|;)')
-        inc_pattern = re.compile(r'^\s*#include\s*[<"]([^>"]+)[>"]')
+        includes = re.findall(r'#\s*include\s*["<]([^">]+)[">]', content)
 
-        file_imports = []
-        for line in lines:
-            m = inc_pattern.search(line)
-            if m:
-                file_imports.append(m.group(1))
+        class_pattern = re.compile(
+            r'^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(?:alignas\([^)]*\)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[^;{]+)?\s*(?:\{|$)'
+        )
+        func_pattern = re.compile(
+            r'^\s*(?:(?:inline|static|constexpr|virtual|explicit|friend|auto)\s+)*(?:(?:const\s+)?[A-Za-z_][A-Za-z0-9_:*&<>\s]+?\s+)?([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^;]*)\)\s*(?:const)?\s*(?:noexcept(?:\([^)]*\))?)?\s*(?:override|final)?\s*(?:->\s*[^;{]+)?\s*(?:\{|$)'
+        )
+
+        def has_body(start_idx: int) -> bool:
+            for j in range(start_idx - 1, min(len(lines), start_idx + 4)):
+                l = lines[j]
+                if '{' in l:
+                    return True
+                if ';' in l:
+                    return False
+            return False
 
         for idx, line in enumerate(lines, start=1):
-            t_match = type_pattern.search(line)
-            if t_match and ("{" in line or (idx < len(lines) and "{" in lines[idx])):
-                name = t_match.group(1)
-                end_line = self._find_closing_brace(lines, idx)
-                nodes.append(CodeNode(
-                    id=CodeNode.generate_id(repo, file_path, name, idx),
-                    repo=repo,
-                    file_path=file_path,
-                    symbol_name=name,
-                    symbol_type=SymbolType.CLASS,
-                    start_line=idx,
-                    end_line=end_line,
-                    signature=line.strip(),
-                    metadata={"file_imports": file_imports}
-                ))
-
-            f_match = fn_pattern.search(line)
-            if f_match and "{" in line:
-                name = f_match.group(1)
-                if name not in ("if", "for", "while", "switch", "catch"):
+            c_match = class_pattern.search(line)
+            if c_match and has_body(idx):
+                name = c_match.group(1)
+                if name not in ("if", "for", "while", "switch", "return"):
                     end_line = self._find_closing_brace(lines, idx)
                     nodes.append(CodeNode(
                         id=CodeNode.generate_id(repo, file_path, name, idx),
                         repo=repo,
                         file_path=file_path,
                         symbol_name=name,
+                        symbol_type=SymbolType.CLASS,
+                        start_line=idx,
+                        end_line=end_line,
+                        signature=line.strip(),
+                        metadata={"file_imports": includes} if idx == 1 or not nodes else {}
+                    ))
+
+            f_match = func_pattern.search(line)
+            if f_match and has_body(idx) and not c_match:
+                name = f_match.group(1)
+                if name not in ("if", "for", "while", "switch", "catch", "return"):
+                    end_line = self._find_closing_brace(lines, idx)
+                    block = "".join(lines[idx - 1 : end_line])
+                    clean_name = name.split("::")[-1]
+                    nodes.append(CodeNode(
+                        id=CodeNode.generate_id(repo, file_path, clean_name, idx),
+                        repo=repo,
+                        file_path=file_path,
+                        symbol_name=clean_name,
                         symbol_type=SymbolType.FUNCTION,
                         start_line=idx,
                         end_line=end_line,
                         signature=line.strip(),
-                        code_content="".join(lines[idx - 1 : end_line]),
-                        metadata={"file_imports": file_imports}
+                        code_content=block,
+                        metadata={"file_imports": includes} if not nodes else {}
                     ))
 
         return nodes, edges
+
+    _parse_c_cpp = _parse_cpp
 
     # -------------------------------------------------------------
     # Clojure Parser Implementation (Compojure, Ring, clj-http)

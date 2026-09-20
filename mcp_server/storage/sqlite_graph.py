@@ -276,9 +276,8 @@ class SQLiteGraphStore:
             try:
                 # Try FTS5 match query first
                 safe_query = "".join(c for c in query if c.isalnum() or c in (" ", "_", "-")).strip()
-                if not safe_query:
-                    return []
-                fts_expr = f"{safe_query}*"
+                tokens = [t for t in safe_query.split() if len(t) > 1]
+                fts_expr = " OR ".join(f'"{t}"*' for t in tokens) if tokens else f'"{safe_query}"*'
                 
                 if repo:
                     cursor = conn.execute("""
