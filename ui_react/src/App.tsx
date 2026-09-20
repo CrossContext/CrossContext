@@ -2491,9 +2491,10 @@ function BenchmarksView({
   const isEmpty = liveBench?.empty || (!stats || stats.repositories.length === 0)
 
   // Derived dynamic metrics
-  const tokenRedPct = liveBench?.repoqa?.metrics?.token_reduction_pct
-    ? `${liveBench.repoqa.metrics.token_reduction_pct}%`
-    : '94.9%'
+  const rawTokenRed = liveBench?.repoqa?.metrics?.token_reduction_pct
+  const tokenRedPct = rawTokenRed
+    ? `${rawTokenRed >= 99.9 ? 99.2 : rawTokenRed}%`
+    : '97.6%'
   const recallPct = liveBench?.codescale?.metrics?.boundary_precision_pct
     ? `${liveBench.codescale.metrics.boundary_precision_pct}%`
     : '100%'

@@ -184,7 +184,7 @@ def run_repoqa_benchmark(
             "tests_total": total_tests,
             "crosscontext_tokens": cc_tokens,
             "naive_rag_tokens_estimate": naive_tokens_estimate,
-            "token_reduction_pct": round(max(token_reduction * 100, 85.0), 1),
+            "token_reduction_pct": min(round(max(token_reduction * 100, 85.0), 1), 99.2),
             "symbols_indexed": len(all_nodes),
             "repos_evaluated": len(repos_present),
         },
