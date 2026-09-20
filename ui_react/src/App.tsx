@@ -740,9 +740,63 @@ function CrossRepoGraph({
                     </button>
                   </div>
 
-                  {/* Express.js */}
+                  {/* Kubernetes */}
                   <div
-                    onClick={() => onOpenIngest?.('expressjs')}
+                    onClick={() => onOpenIngest?.('kubernetes')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'white',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#2563eb'
+                      e.currentTarget.style.background = '#f0f7ff'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'var(--color-border)'
+                      e.currentTarget.style.background = 'white'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>
+                          kubernetes
+                        </span>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
+                          (Production-Grade Container Scheduling and Orchestration)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Includes kubernetes, client-go, api, apimachinery, ingress-nginx
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('kubernetes'); }}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        background: '#1d4ed8',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ingest kubernetes
+                    </button>
+                  </div>
+
+                  {/* Django */}
+                  <div
+                    onClick={() => onOpenIngest?.('django')}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -766,18 +820,18 @@ function CrossRepoGraph({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#047857' }}>
-                          expressjs
+                          django
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
-                          (Fast, Unopinionated Node.js Web Framework Ecosystem)
+                          (High-Level Python Web Framework Ecosystem)
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Includes express, body-parser, cors, multer, morgan, session
+                        Includes django, channels, asgiref, django-contrib-comments
                       </div>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('expressjs'); }}
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('django'); }}
                       style={{
                         padding: '4px 10px',
                         fontSize: 10,
@@ -790,13 +844,13 @@ function CrossRepoGraph({
                         fontWeight: 600,
                       }}
                     >
-                      Ingest expressjs
+                      Ingest django
                     </button>
                   </div>
 
-                  {/* Redux */}
+                  {/* VLC / VideoLAN */}
                   <div
-                    onClick={() => onOpenIngest?.('reduxjs')}
+                    onClick={() => onOpenIngest?.('videolan')}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -809,8 +863,8 @@ function CrossRepoGraph({
                       transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#7c3aed'
-                      e.currentTarget.style.background = '#faf5ff'
+                      e.currentTarget.style.borderColor = '#d97706'
+                      e.currentTarget.style.background = '#fffbeb'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.borderColor = 'var(--color-border)'
@@ -819,24 +873,24 @@ function CrossRepoGraph({
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#6d28d9' }}>
-                          reduxjs
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                          vlc (videolan)
                         </span>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-text-dim)' }}>
-                          (Predictable State Management and Developer Tools Ecosystem)
+                          (Open-Source Cross-Platform Multimedia Framework and Player)
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Includes redux, redux-toolkit, react-redux, reselect
+                        Includes vlc, vlc-android, vlc-ios, libvlcpp, npapi-vlc
                       </div>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('reduxjs'); }}
+                      onClick={(e) => { e.stopPropagation(); onOpenIngest?.('videolan'); }}
                       style={{
                         padding: '4px 10px',
                         fontSize: 10,
                         fontFamily: 'var(--font-mono)',
-                        background: '#6d28d9',
+                        background: '#b45309',
                         color: 'white',
                         border: 'none',
                         borderRadius: 3,
@@ -844,7 +898,7 @@ function CrossRepoGraph({
                         fontWeight: 600,
                       }}
                     >
-                      Ingest reduxjs
+                      Ingest vlc
                     </button>
                   </div>
                 </div>
@@ -3102,8 +3156,10 @@ function IngestModal({
       setStatusMsg('Please enter an organization name or GitHub URL.')
       return
     }
+    const raw = orgInput.trim()
+    const targetOrg = raw.toLowerCase() === 'vlc' ? 'videolan' : raw
     setDiscovering(true)
-    setStatusMsg(`Discovering repositories for '${orgInput.trim()}'...`)
+    setStatusMsg(`Discovering repositories for '${targetOrg}'...`)
     setDiscoveredRepos([])
     setSelectedOrgRepos([])
 
@@ -3111,11 +3167,11 @@ function IngestModal({
       const discRes = await fetch(`${API_BASE}/api/repos/discover-org`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ org: orgInput.trim() }),
+        body: JSON.stringify({ org: targetOrg }),
       })
       const discData = await discRes.json()
       if (!discData.repositories || discData.repositories.length === 0) {
-        setStatusMsg(`No public repositories found for '${orgInput.trim()}'.`)
+        setStatusMsg(`No public repositories found for '${targetOrg}'.`)
         setDiscovering(false)
         return
       }
@@ -3386,7 +3442,7 @@ function IngestModal({
                       disabled={isBusy}
                       onChange={e => setOrgInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !isBusy && handleDiscoverOrg()}
-                      placeholder="e.g. Project-HAMi, pallets, fastapi, or https://github.com/Project-HAMi"
+                      placeholder="e.g. meshery, kubernetes, django, videolan"
                       style={{
                         flex: 1, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                         border: '1px solid var(--color-border-bright)', borderRadius: 2, outline: 'none',
@@ -3406,6 +3462,41 @@ function IngestModal({
                     >
                       {discovering ? 'Discovering...' : 'Discover Repos'}
                     </button>
+                  </div>
+
+                  {/* Quick Example Org Pills */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)' }}>
+                      Quick examples:
+                    </span>
+                    {[
+                      { name: 'meshery', label: 'meshery' },
+                      { name: 'kubernetes', label: 'kubernetes' },
+                      { name: 'django', label: 'django' },
+                      { name: 'videolan', label: 'vlc (videolan)' },
+                    ].map(ex => (
+                      <button
+                        key={ex.name}
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          setOrgInput(ex.name)
+                        }}
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: 10,
+                          fontFamily: 'var(--font-mono)',
+                          background: orgInput === ex.name ? '#111' : '#f3f4f6',
+                          color: orgInput === ex.name ? 'white' : '#374151',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 2,
+                          cursor: isBusy ? 'not-allowed' : 'pointer',
+                          fontWeight: orgInput === ex.name ? 700 : 500,
+                        }}
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

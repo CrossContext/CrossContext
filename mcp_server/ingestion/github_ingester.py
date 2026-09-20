@@ -73,6 +73,9 @@ class GitHubRepoIngester:
         if not clean_org:
             return []
 
+        if clean_org.lower() == "vlc":
+            clean_org = "videolan"
+
         # Return cached discovery result if available
         cache_key = clean_org.lower()
         if cache_key in cls._ORG_CACHE and cls._ORG_CACHE[cache_key]:
