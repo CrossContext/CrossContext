@@ -99,6 +99,15 @@ const FALLBACK_EDGES: GraphEdge[] = [
   { from: 'repo_frontend_portal:LoginForm.tsx:LoginForm:9', to: 'repo_frontend_portal:authClient.ts:verifyUserSession:22', kind: 'calls', edge_type: 'calls' },
 ]
 
+const getApiBase = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname || '127.0.0.1'
+    return `http://${host}:8000`
+  }
+  return 'http://127.0.0.1:8000'
+}
+const API_BASE = getApiBase()
+
 // ── Interactive 2D Movable & Zoomable Graph Component ────────────────────────
 
 const NODE_WIDTH = 180
@@ -1084,7 +1093,7 @@ function AgentPanel({
     setTotalTokens(0)
 
     try {
-      const res = await fetch('http://localhost:8000/api/agent/run', {
+      const res = await fetch(`${API_BASE}/api/agent/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1451,7 +1460,7 @@ function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
         setProgress(p => (p < 85 ? p + 20 : p))
       }, 120)
 
-      const res = await fetch('http://localhost:8000/api/benchmarks')
+      const res = await fetch(`${API_BASE}/api/benchmarks`)
       clearInterval(interval)
       setProgress(100)
 
@@ -1948,8 +1957,8 @@ function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
     setLoading(true)
     try {
       const url = reposToFilter && reposToFilter.length > 0
-        ? `http://localhost:8000/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
-        : 'http://localhost:8000/api/org/blueprint'
+        ? `${API_BASE}/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
+        : `${API_BASE}/api/org/blueprint`
 
       const res = await fetch(url)
       const d = await res.json()
@@ -2362,7 +2371,7 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
   // Fetch all graph nodes to derive unique files for selected repo
   useEffect(() => {
     if (!selectedRepo) return
-    fetch('http://localhost:8000/api/graph')
+    fetch(`${API_BASE}/api/graph`)
       .then(r => r.json())
       .then(g => {
         const matchingFiles = Array.from(new Set(
@@ -2385,7 +2394,7 @@ function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion
   useEffect(() => {
     if (!selectedRepo || !selectedFile) return
     setLoadingFile(true)
-    fetch(`http://localhost:8000/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
+    fetch(`${API_BASE}/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
       .then(r => r.json())
       .then(res => {
         setFileContent(res.content || '(File content empty or unavailable on disk)')
@@ -2617,7 +2626,7 @@ function IngestModal({
     setSelectedOrgRepos([])
 
     try {
-      const discRes = await fetch('http://localhost:8000/api/repos/discover-org', {
+      const discRes = await fetch(`${API_BASE}/api/repos/discover-org`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ org: orgInput.trim() }),
@@ -2681,7 +2690,7 @@ function IngestModal({
     setLoading(true)
     try {
       setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into deterministic AST graph...`)
-      const res = await fetch('http://localhost:8000/api/repos/ingest', {
+      const res = await fetch(`${API_BASE}/api/repos/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
@@ -3398,13 +3407,13 @@ export default function App() {
   // Fetch initial graph & stats on load
   const loadData = useCallback(async () => {
     try {
-      const statsRes = await fetch('http://localhost:8000/api/stats')
+      const statsRes = await fetch(`${API_BASE}/api/stats`)
       if (statsRes.ok) {
         const s = await statsRes.json()
         setStats(s)
       }
 
-      const graphRes = await fetch('http://localhost:8000/api/graph')
+      const graphRes = await fetch(`${API_BASE}/api/graph`)
       if (graphRes.ok) {
         const g = await graphRes.json()
         setGraphNodes(g.nodes || [])
@@ -3421,7 +3430,7 @@ export default function App() {
   }, [loadData])
 
   const handleReindex = async () => {
-    const res = await fetch('http://localhost:8000/api/repos/reindex', { method: 'POST' })
+    const res = await fetch(`${API_BASE}/api/repos/reindex`, { method: 'POST' })
     if (res.ok) {
       await loadData()
     }
