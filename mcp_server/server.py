@@ -14,12 +14,15 @@ from typing import Optional, Dict, Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except (ImportError, ModuleNotFoundError):
+    from mcp.server.mcpserver import MCPServer as FastMCP
 from mcp_server.tools import CodeGraphToolManager
 
-# Initialize FastMCP Server
+# Initialize MCP Server
 mcp = FastMCP("CrossContext-CodeGraph-Server")
-manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
+manager = CodeGraphToolManager(db_path=os.getenv("SQLITE_DB_PATH", "data/crosscontext_graph.db"))
 
 
 @mcp.tool()
