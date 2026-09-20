@@ -72,10 +72,9 @@ class TreeSitterEngine:
         self,
         repo: str,
         root_dir: str,
-        max_files: int = 150,
         progress_cb: Optional[Any] = None
     ) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Recursively parses core architecture source files in a repository directory."""
+        """Recursively parses all source files in a repository directory."""
         all_nodes: List[CodeNode] = []
         all_edges: List[CodeEdge] = []
         root_path = Path(root_dir)
@@ -116,22 +115,16 @@ class TreeSitterEngine:
                         candidates.append((full_p, rel))
                     except Exception:
                         pass
-            if len(candidates) >= max_files * 2:
-                break
 
-        # Prioritize root entrypoints, controllers, and primary package modules
-        candidates.sort(key=lambda x: len(x[1].split("/")))
-        selected = candidates[:max_files]
-        total_selected = len(selected)
-
-        for idx, (file, rel) in enumerate(selected):
+        total_files = len(candidates)
+        for idx, (file, rel) in enumerate(candidates):
             try:
                 content = file.read_text(encoding="utf-8", errors="replace")
                 nodes, edges = self.parse_file(repo, rel, content)
                 all_nodes.extend(nodes)
                 all_edges.extend(edges)
-                if progress_cb and (idx % 15 == 0 or idx == total_selected - 1):
-                    progress_cb("parsing", f"Parsing AST symbols in {repo} ({idx+1}/{total_selected} files)...", 0.5 + (0.2 * (idx / max(total_selected, 1))))
+                if progress_cb and (idx % 25 == 0 or idx == total_files - 1):
+                    progress_cb("parsing", f"Parsing AST symbols in {repo} ({idx+1}/{total_files} files)...", 0.5 + (0.2 * (idx / max(total_files, 1))))
             except Exception as e:
                 print(f"[Parser] Skipping {rel}: {e}")
 

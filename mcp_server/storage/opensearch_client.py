@@ -131,6 +131,8 @@ class DualModeVectorStore:
             return node.id, vec
 
         completed = 0
+        if progress_cb:
+            progress_cb("embedding", f"Generating Amazon Titan v2 embeddings (0/{total_targets})...", 0.9)
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = [executor.submit(_embed_node, n) for n in target_nodes]
             for future in as_completed(futures):

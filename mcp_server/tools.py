@@ -36,6 +36,8 @@ class CodeGraphToolManager:
             all_edges.extend(edges)
 
         # Cross-repository linking
+        if progress_cb:
+            progress_cb("linking", f"Linking cross-repo endpoints & call graph across {len(all_nodes)} symbols...", 0.8)
         cross_edges = self.linker.link_repositories(all_nodes)
         all_edges.extend(cross_edges)
 
@@ -43,6 +45,8 @@ class CodeGraphToolManager:
             self.graph_store.clear()
 
         # Persist to relational and vector stores
+        if progress_cb:
+            progress_cb("persisting", f"Persisting {len(all_nodes)} symbols & {len(all_edges)} relationships...", 0.85)
         self.graph_store.insert_nodes(all_nodes)
         self.graph_store.insert_edges(all_edges)
         self.vector_store.index_nodes(all_nodes, progress_cb=progress_cb)
