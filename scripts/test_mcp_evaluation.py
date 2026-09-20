@@ -1,6 +1,6 @@
 """
-OmniContext - Test Project MCP Tools Against redhat-et/ripwire
-Evaluates all 5 MCP tools against the indexed ripwire C++23 / Python / TS codebase.
+CrossContext - Test Project MCP Tools Against sample_codebase
+Evaluates all 5 MCP tools against the indexed codebase C++23 / Python / TS codebase.
 """
 
 import os
@@ -15,7 +15,7 @@ from mcp_server.tools import CodeGraphToolManager
 
 def main():
     print("=" * 65)
-    print(" OmniContext MCP Server Evaluation against redhat-et/ripwire")
+    print(" CrossContext MCP Server Evaluation against sample_codebase")
     print("=" * 65)
 
     db_path = "data/crosscontext_graph.db"
@@ -85,13 +85,13 @@ def main():
     for i, match in enumerate(search_res["results"][:5], start=1):
         print(f"  [{i}] {match['symbol_name']} ({match['symbol_type']}) in {match['file_path']}:{match['start_line']}")
 
-    # 6. Test Strands Agent reasoning loop on ripwire
-    print("\n[BONUS] Testing Autonomous Agent Loop on ripwire codebase...")
+    # 6. Test Strands Agent reasoning loop on codebase
+    print("\n[BONUS] Testing Autonomous Agent Loop on codebase codebase...")
     import asyncio
     from agent_orchestrator.agent import CrossContextAgent
     agent = CrossContextAgent(db_path=db_path)
     agent_res = asyncio.run(agent.run(
-        prompt="Analyze how HopTestedPartition and computeHopTestedPartition are used in ripwire and trace their impact."
+        prompt="Analyze how HopTestedPartition and computeHopTestedPartition are used in codebase and trace their impact."
     ))
     print(f"  Agent Status:       {agent_res['status']}")
     telemetry = agent_res.get('telemetry', {})

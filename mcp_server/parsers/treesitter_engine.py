@@ -1,4 +1,4 @@
-"""OmniContext - Multi-Language Structural AST Engine & Semantic Chunker.
+"""CrossContext - Multi-Language Structural AST Engine & Semantic Chunker.
 
 Parses Python, TypeScript, JavaScript, Go, and Java source code into discrete, unbroken
 logical units (classes, functions, methods, endpoints) preserving exact syntactic boundaries.

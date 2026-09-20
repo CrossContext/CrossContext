@@ -1,5 +1,5 @@
 """
-OmniContext - Dynamic GitHub Repository Ingester
+CrossContext - Dynamic GitHub Repository Ingester
 Clones and indexes real-world multi-repository codebases from GitHub or local paths.
 Parses AST boundaries, discovers cross-repo dependencies, and registers symbols in the knowledge graph.
 """

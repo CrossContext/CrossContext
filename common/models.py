@@ -1,5 +1,5 @@
 """
-OmniContext - Common Data Contracts
+CrossContext - Common Data Contracts
 Defines the standard schemas shared across:
 - Storage Layer (sqlite_graph, opensearch_client)
 - Parsing Pipeline (treesitter_engine, scip_indexer)

@@ -1,3 +1,3 @@
 """
-OmniContext MCP Server Package
+CrossContext MCP Server Package
 """

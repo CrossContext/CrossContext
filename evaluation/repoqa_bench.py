@@ -87,7 +87,7 @@ def run_repoqa_benchmark(
     passed_tests = 0
     total_tests = len(test_queries)
     details = []
-    omni_tokens = 0
+    cc_tokens = 0
     naive_tokens_estimate = 0
 
     for tc in test_queries:
@@ -102,36 +102,33 @@ def run_repoqa_benchmark(
         if found:
             match = next(r for r in results if r.symbol_name == tc["expected_symbol"])
             token_count = len(match.code_content or "") // 4
-            omni_tokens += token_count
+            cc_tokens += token_count
             passed_tests += 1
-            details.append(f"✅ Found `{tc['expected_symbol']}` in `{match.repo}/{match.file_path}` ({token_count} tokens)")
+            details.append(f"Found `{tc['expected_symbol']}` in `{match.repo}/{match.file_path}` ({token_count} tokens)")
         else:
-            details.append(f"❌ Could not locate `{tc['expected_symbol']}` via query: '{tc['query']}'")
+            details.append(f"Could not locate `{tc['expected_symbol']}` via query: '{tc['query']}'")
 
         # Estimate naive RAG baseline: full file dump
         for node in all_nodes:
             if node.repo == tc["expected_repo"]:
                 naive_tokens_estimate += len(node.code_content or "") // 4
 
-    score = passed_tests / max(total_tests, 1)
-    token_reduction = 1.0 - (omni_tokens / max(naive_tokens_estimate, 1))
-
-    elapsed = (time.time() - start) * 1000
+    token_reduction = 1.0 - (cc_tokens / max(naive_tokens_estimate, 1))
 
     return BenchmarkResult(
-        benchmark_name="RepoQA Search Needle Function",
-        passed=score >= 0.5,
-        score=score,
+        benchmark_name="RepoQA Cross-Repository Symbol Precision",
+        passed=passed_tests == total_tests,
+        score=float(passed_tests) / float(total_tests),
+        execution_time_ms=0.0,
         metrics={
             "tests_passed": passed_tests,
             "tests_total": total_tests,
-            "crosscontext_tokens": omni_tokens,
+            "crosscontext_tokens": cc_tokens,
             "naive_rag_tokens_estimate": naive_tokens_estimate,
             "token_reduction_pct": round(token_reduction * 100, 1),
             "symbols_indexed": len(all_nodes),
         },
         details=details,
-        execution_time_ms=elapsed,
     )
 
 

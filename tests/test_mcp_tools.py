@@ -1,4 +1,4 @@
-"""Unit & Integration Tests for OmniContext MCP Code Graph Tools."""
+"""Unit & Integration Tests for CrossContext MCP Code Graph Tools."""
 
 import pytest
 from pathlib import Path

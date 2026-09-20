@@ -23,7 +23,7 @@ export const LoginForm: React.FC = () => {
 
   return (
     <div className="login-container">
-      <h2>OmniContext Portal Authentication</h2>
+      <h2>CrossContext Portal Authentication</h2>
       <form onSubmit={handleVerify}>
         <input
           type="text"

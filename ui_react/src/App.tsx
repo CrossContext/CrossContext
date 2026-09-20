@@ -987,11 +987,11 @@ function BenchmarksView() {
         </div>
 
         {(liveBench?.summary_table || [
-          { metric: 'Cross-Repo Recall', rag: '0%', omni: '100%', delta: '+100%' },
-          { metric: 'Context Tokens', rag: '2,120', omni: '109', delta: '94.9% reduction' },
-          { metric: 'Hallucinated File Paths', rag: '42%', omni: '0%', delta: 'Zero' },
-          { metric: 'Blast Radius Detection', rag: 'Failed', omni: 'Complete', delta: 'Zero breakage' },
-          { metric: 'Retrieval Latency', rag: '3,400 ms', omni: '7.4 ms', delta: 'High Speed' },
+          { metric: 'Cross-Repo Recall', rag: '0%', crosscontext: '100%', delta: '+100%' },
+          { metric: 'Context Tokens', rag: '2,120', crosscontext: '109', delta: '94.9% reduction' },
+          { metric: 'Hallucinated File Paths', rag: '42%', crosscontext: '0%', delta: 'Zero' },
+          { metric: 'Blast Radius Detection', rag: 'Failed', crosscontext: 'Complete', delta: 'Zero breakage' },
+          { metric: 'Retrieval Latency', rag: '3,400 ms', crosscontext: '7.4 ms', delta: 'High Speed' },
         ]).map((row: any, i: number) => (
           <div
             key={row.metric}
@@ -1004,7 +1004,7 @@ function BenchmarksView() {
           >
             <span style={{ color: '#111', fontSize: 12 }}>{row.metric}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#ef4444' }}>{row.rag}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>{row.omni}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>{row.crosscontext}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111', fontWeight: 600 }}>{row.delta}</span>
           </div>
         ))}
@@ -2057,7 +2057,7 @@ function EngineSettingsSidebar({
           ))}
 
           {/* 5. Cycle Detection Guardrail */}
-          {field('Cycle Guardrails', 'Tripwire blocking infinite recursive graph loops', (
+          {field('Cycle Guardrails', 'Circuit breaker blocking infinite recursive graph loops', (
             <div
               onClick={() => setLocalCfg(c => ({ ...c, cycleDetection: !c.cycleDetection }))}
               style={{
@@ -2067,7 +2067,7 @@ function EngineSettingsSidebar({
               }}
             >
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#111' }}>
-                Infinite loop tripwire
+                Infinite loop circuit breaker
               </span>
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10,

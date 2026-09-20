@@ -1,3 +1,3 @@
 """
-OmniContext AWS Strands Agent Orchestrator Package
+CrossContext AWS Strands Agent Orchestrator Package
 """

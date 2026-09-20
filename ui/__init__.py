@@ -1,3 +1,3 @@
 """
-OmniContext UI & Visualization Package
+CrossContext UI & Visualization Package
 """

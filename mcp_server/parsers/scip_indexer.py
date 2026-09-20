@@ -1,4 +1,4 @@
-"""OmniContext - Cross-Repository Linker (SCIP / Semantic API Resolver).
+"""CrossContext - Cross-Repository Linker (SCIP / Semantic API Resolver).
 
 Bridges distributed multi-repo boundaries by resolving:
 1. HTTP API Endpoint definitions (FastAPI / Flask / Spring / Gin / Express) to API consumers (fetch / axios / requests / httpx / Go http), with full support for parameterized path variables (/users/{id} vs /users/123).
