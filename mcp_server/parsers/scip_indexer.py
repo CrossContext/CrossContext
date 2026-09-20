@@ -12,11 +12,60 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 from common.models import CodeNode, CodeEdge, EdgeType, SymbolType
 
 
+GENERIC_AND_BUILTIN_SYMBOLS: Set[str] = {
+    "open", "close", "read", "write", "send", "recv", "start", "stop", "run", "init",
+    "test", "request", "response", "data", "get", "post", "put", "delete", "patch",
+    "set", "fetch", "config", "client", "service", "helper", "error", "result", "item",
+    "user", "app", "server", "handler", "main", "parse", "format", "load", "dump",
+    "create", "update", "remove", "clear", "validate", "check", "log", "debug", "info",
+    "warn", "exec", "call", "apply", "map", "filter", "reduce", "list", "dict", "str",
+    "int", "bool", "float", "len", "type", "print", "status", "value", "key", "token",
+    "tofirestore", "formatbytes", "formatdate", "ismacos", "setup", "teardown", "beforeeach",
+    "aftereach", "describe", "it", "expect", "assert", "render", "component", "props",
+    "state", "params", "query", "body", "headers", "options", "context", "next",
+    "index", "default", "util", "utils", "common", "shared", "model", "view", "controller",
+    "clean", "reset", "build", "process", "handle", "execute", "dispose", "destroy", "refresh"
+}
+
+COMMON_THIRD_PARTY_PACKAGES: Set[str] = {
+    "flask", "fastapi", "requests", "httpx", "aiohttp", "urllib", "urllib3", "pydantic",
+    "sqlalchemy", "pytest", "unittest", "django", "celery", "redis", "boto3", "botocore",
+    "numpy", "pandas", "scipy", "sklearn", "torch", "tensorflow", "transformers", "logging",
+    "os", "sys", "re", "json", "time", "datetime", "math", "random", "pathlib", "typing",
+    "collections", "itertools", "functools", "copy", "io", "shutil", "subprocess", "socket",
+    "http", "asyncio", "threading", "multiprocessing", "react", "react-dom", "vue", "angular",
+    "axios", "express", "lodash", "moment", "dayjs", "ky", "zustand", "redux", "next", "vite",
+    "fs", "path", "events", "stream", "crypto", "util", "net", "tls", "dns", "zlib"
+}
+
+
 class CrossRepoLinker:
     """Connects symbols across multiple repositories to construct deterministic cross-repo edges."""
 
     def __init__(self):
         pass
+
+    @staticmethod
+    def _is_repo_imported(target_repo: str, import_stmt: str) -> bool:
+        """Determines if an import statement explicitly references the target repository."""
+        clean_imp = import_stmt.strip().replace("\\", "/")
+        repo_names = [target_repo]
+        clean_no_prefix = re.sub(r'^repo[_-]', '', target_repo)
+        if len(clean_no_prefix) >= 4 and clean_no_prefix.lower() not in COMMON_THIRD_PARTY_PACKAGES:
+            repo_names.append(clean_no_prefix)
+
+        for r_name in repo_names:
+            # Word or path boundary matching: e.g. from repo_shared_sdk import ... or from '@org/shared_sdk'
+            pattern = rf'(?:^|[\s\'"`/@./])({re.escape(r_name)})(?:[\s\'"`/@./]|$)'
+            if re.search(pattern, clean_imp, re.IGNORECASE):
+                # Ensure the statement is not actually just importing a 3rd-party library
+                parts = [p.lower() for p in re.split(r'[\s./\'"`]', clean_imp) if p]
+                if len(parts) > 1 and parts[0] in ("from", "import"):
+                    root_mod = parts[1]
+                    if root_mod in COMMON_THIRD_PARTY_PACKAGES and root_mod != r_name.lower():
+                        continue
+                return True
+        return False
 
     def link_repositories(self, nodes: List[CodeNode]) -> List[CodeEdge]:
         """Analyzes nodes across all indexed repositories and discovers cross-repository edges."""
@@ -48,26 +97,15 @@ class CrossRepoLinker:
             consumed_endpoint = node.metadata.get("consumes_endpoint", "")
             consumed_method = (node.metadata.get("consumes_http_method") or "GET").upper()
 
-            # If not explicitly tagged, scan code content for known route patterns
-            if not consumed_endpoint and node.code_content:
-                for ep in all_endpoints:
-                    if ep.repo == node.repo:
-                        continue
-                    ep_route = ep.metadata.get("endpoint_route", "")
-                    if ep_route:
-                        norm_ep = self._normalize_route(ep_route)
-                        # Check exact string presence or pattern match
-                        if norm_ep in node.code_content:
-                            consumed_endpoint = norm_ep
-                            break
-                        # Check parameterized pattern
-                        canon_ep = self._normalize_parameterized_route(ep_route)
-                        if canon_ep != norm_ep and canon_ep.replace("{_param_}", "") in node.code_content:
-                            consumed_endpoint = ep_route
-                            break
-
             if consumed_endpoint:
                 norm_consumed = self._normalize_route(consumed_endpoint)
+
+                # Guard: Root path or bare slash ('/' or "") requires an explicit target service base URL matching the target repo
+                is_root_route = norm_consumed in ("", "/")
+                target_base_url = (node.metadata or {}).get("target_base_url", "").lower()
+                if is_root_route and not target_base_url:
+                    continue
+
                 target_endpoint = None
 
                 # 2a. First try exact method + route match
@@ -77,8 +115,8 @@ class CrossRepoLinker:
                 if not target_endpoint and norm_consumed in route_fallback_map:
                     target_endpoint = next((ep for ep in route_fallback_map[norm_consumed] if ep.repo != node.repo), None)
 
-                # 2c. Try parameterized / wildcard route matching across all external endpoints
-                if not target_endpoint:
+                # 2c. Try parameterized / wildcard route matching across all external endpoints (only for non-root routes)
+                if not target_endpoint and not is_root_route:
                     # Prefer matching HTTP method first
                     for ep in all_endpoints:
                         if ep.repo == node.repo:
@@ -98,6 +136,12 @@ class CrossRepoLinker:
                             if self._route_matches(ep_route, consumed_endpoint):
                                 target_endpoint = ep
                                 break
+
+                # Root route verification: target base URL must match producer repo
+                if target_endpoint and is_root_route:
+                    target_repo_clean = re.sub(r'^repo[_-]', '', target_endpoint.repo).lower().replace("_", "-")
+                    if target_repo_clean not in target_base_url and target_endpoint.repo.lower() not in target_base_url:
+                        target_endpoint = None
 
                 if target_endpoint and target_endpoint.repo != node.repo:
                     edge_key = (node.id, target_endpoint.id, EdgeType.CONSUMES_API.value)
@@ -120,35 +164,41 @@ class CrossRepoLinker:
             # 3. Cross-repo SDK / function calls & Import bindings
             file_imports = node.metadata.get("file_imports", [])
 
-            # 3a. Check explicit cross-repo imports (e.g. from shared_sdk import client)
+            # 3a. Check explicit cross-repo imports (e.g. from repo_shared_sdk import client)
             for imp in file_imports:
-                imp_clean = imp.replace("\\", "/").strip("'\"")
                 for target_repo, target_nodes in nodes_by_repo.items():
                     if target_repo == node.repo:
                         continue
 
-                    # Check if target repo name or slug matches import path
-                    clean_target_repo = target_repo.replace("repo_", "").replace("_", "")
-                    clean_imp = imp_clean.replace("repo_", "").replace("_", "").replace("-", "")
+                    if not self._is_repo_imported(target_repo, imp):
+                        continue
 
-                    if clean_target_repo in clean_imp:
-                        for t_node in target_nodes:
-                            if t_node.symbol_name in imp_clean or (node.code_content and t_node.symbol_name in node.code_content):
-                                edge_key = (node.id, t_node.id, EdgeType.IMPORTS.value)
-                                if edge_key not in seen_edges:
-                                    seen_edges.add(edge_key)
-                                    cross_edges.append(CodeEdge(
-                                        caller_id=node.id,
-                                        callee_id=t_node.id,
-                                        edge_type=EdgeType.IMPORTS,
-                                        confidence=0.98,
-                                        metadata={
-                                            "import": imp_clean,
-                                            "symbol": t_node.symbol_name,
-                                            "caller_repo": node.repo,
-                                            "target_repo": target_repo
-                                        }
-                                    ))
+                    for t_node in target_nodes:
+                        if t_node.symbol_name.lower() in GENERIC_AND_BUILTIN_SYMBOLS:
+                            continue
+                        if len(t_node.symbol_name) < 4:
+                            continue
+
+                        # Verify symbol is specifically imported or called in code
+                        is_symbol_in_import = bool(re.search(r'\b' + re.escape(t_node.symbol_name) + r'\b', imp))
+                        is_symbol_in_code = bool(node.code_content and re.search(r'\b' + re.escape(t_node.symbol_name) + r'\b', node.code_content))
+
+                        if is_symbol_in_import or is_symbol_in_code:
+                            edge_key = (node.id, t_node.id, EdgeType.IMPORTS.value)
+                            if edge_key not in seen_edges:
+                                seen_edges.add(edge_key)
+                                cross_edges.append(CodeEdge(
+                                    caller_id=node.id,
+                                    callee_id=t_node.id,
+                                    edge_type=EdgeType.IMPORTS,
+                                    confidence=0.98,
+                                    metadata={
+                                        "import": imp,
+                                        "symbol": t_node.symbol_name,
+                                        "caller_repo": node.repo,
+                                        "target_repo": target_repo
+                                    }
+                                ))
 
             # 3b. Check invocations of external functions/methods (SDK client prefix or imported symbols)
             if node.code_content:
@@ -158,16 +208,33 @@ class CrossRepoLinker:
                 for sym_name in candidate_names:
                     if sym_name == node.symbol_name:
                         continue
+                    # Guardrail: Never resolve generic names or built-ins across repos
+                    if sym_name.lower() in GENERIC_AND_BUILTIN_SYMBOLS:
+                        continue
+
                     targets = nodes_by_name[sym_name]
-                    external_targets = [t for t in targets if t.repo != node.repo and t.symbol_type in (SymbolType.FUNCTION, SymbolType.METHOD, SymbolType.CLASS)]
+                    external_targets = [
+                        t for t in targets
+                        if t.repo != node.repo and t.symbol_type in (SymbolType.FUNCTION, SymbolType.METHOD, SymbolType.CLASS)
+                    ]
                     if not external_targets:
                         continue
 
-                    is_explicit_call = bool(re.search(r'\b[a-zA-Z0-9_]*(?:Client|Service|SDK|Helper)\.' + re.escape(sym_name) + r'\(', node.code_content))
-                    is_imported_call = bool(file_imports and any(sym_name in imp or any(t.file_path in imp for t in external_targets) for imp in file_imports))
+                    for target in external_targets:
+                        # Cross-repo symbol invocation strictly requires that the target repo was imported
+                        is_repo_imported = any(self._is_repo_imported(target.repo, imp) for imp in file_imports)
+                        if not is_repo_imported:
+                            continue
 
-                    if is_explicit_call or is_imported_call:
-                        for target in external_targets:
+                        is_imported_call = any(
+                            sym_name in imp and self._is_repo_imported(target.repo, imp)
+                            for imp in file_imports
+                        )
+                        is_explicit_sdk_call = bool(
+                            re.search(r'\b[a-zA-Z0-9_]*(?:Client|Service|SDK|Helper)\.' + re.escape(sym_name) + r'\(', node.code_content)
+                        )
+
+                        if is_imported_call or is_explicit_sdk_call:
                             edge_key = (node.id, target.id, EdgeType.CALLS.value)
                             if edge_key not in seen_edges:
                                 seen_edges.add(edge_key)

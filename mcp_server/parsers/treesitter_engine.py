@@ -208,27 +208,29 @@ class TreeSitterEngine:
             meta["endpoint_route"] = route_path
             meta["http_method"] = http_method
         else:
-            # Check if this Python function consumes external endpoints via requests/httpx/aiohttp/client
+            # Check if this Python function consumes external endpoints via explicit HTTP client calls
             py_api_pattern = re.compile(
-                r'(?:requests|httpx|client|session|http|aiohttp)\.(?P<method>get|post|put|delete|patch)\s*\(\s*f?[\'"`]([^\'"`]+)[\'"`]|'
-                r'(?:requests|httpx)\.request\s*\(\s*[\'"`](?P<req_method>GET|POST|PUT|DELETE|PATCH)[\'"`]\s*,\s*f?[\'"`]([^\'"`]+)[\'"`]',
+                r'(?:requests|httpx|aiohttp)\.(?P<method>get|post|put|delete|patch)\s*\(\s*f?[\'"`]([^\'"`]+)[\'"`]|'
+                r'(?:requests|httpx)\.request\s*\(\s*[\'"`](?P<req_method>GET|POST|PUT|DELETE|PATCH)[\'"`]\s*,\s*f?[\'"`]([^\'"`]+)[\'"`]|'
+                r'(?:session|client)\.(?P<client_method>get|post|put|delete|patch)\s*\(\s*f?[\'"`](https?://[^\'"`]+|/(?:api/|v[0-9]+/)[^\'"`]+)[\'"`]',
                 re.IGNORECASE
             )
             api_match = py_api_pattern.search(code_block)
             if api_match:
-                raw_url = api_match.group(2) or api_match.group(4)
-                http_verb = (api_match.group("method") or api_match.group("req_method") or "GET").upper()
-                cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_url)
-                route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
-                meta["consumes_endpoint"] = route_m.group(1) if route_m else cleaned_endpoint
-                meta["consumes_http_method"] = http_verb
-            else:
-                for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/{}:]+)[\'"`]', code_block):
-                    target_url = direct_match.group(2) if direct_match.group(2) else direct_match.group(3)
-                    if target_url and not any(target_url.endswith(ext) for ext in ('.py', '.ts', '.js', '.json', '.html', '.css', '.png')):
-                        meta["consumes_endpoint"] = target_url
-                        meta["consumes_http_method"] = "POST" if ("post" in code_block.lower() or "POST" in code_block) else "GET"
-                        break
+                raw_url = api_match.group(2) or api_match.group(4) or api_match.group(6)
+                if raw_url and (raw_url.startswith("http://") or raw_url.startswith("https://") or raw_url.startswith("/")):
+                    http_verb = (api_match.group("method") or api_match.group("req_method") or api_match.group("client_method") or "GET").upper()
+                    host_m = re.match(r'^https?://([^/]+)', raw_url)
+                    if host_m:
+                        meta["target_base_url"] = host_m.group(1).lower()
+
+                    cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_url).split('?')[0].strip()
+                    route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
+                    final_ep = route_m.group(1) if route_m else cleaned_endpoint
+                    # Guard: Ignore blank, bare slash without explicit host, or non-endpoint assets
+                    if final_ep and final_ep != "/" and not any(final_ep.endswith(ext) for ext in ('.py', '.ts', '.js', '.json', '.html', '.css', '.png', '.jpg')):
+                        meta["consumes_endpoint"] = final_ep
+                        meta["consumes_http_method"] = http_verb
 
         if parent_class:
             meta["parent_class"] = parent_class
@@ -351,8 +353,7 @@ class TreeSitterEngine:
             r'(?:fetch|axios\.(?P<method>get|post|put|delete|patch)|axios|'
             r'ky\.(?P<ky_method>get|post|put|delete|patch)|ky|'
             r'apiClient\.(?P<client_method>get|post|put|delete|patch)|'
-            r'api\.(?P<api_method>get|post|put|delete|patch)|'
-            r'httpClient\.(?P<http_method>get|post|put|delete|patch))\s*\(\s*[`\'"]([^`\'"]+)[`\'"]',
+            r'httpClient\.(?P<http_method>get|post|put|delete|patch))\s*\(\s*[`\'"](?P<url>[^`\'"]+)[`\'"]',
             re.IGNORECASE
         )
 
@@ -408,30 +409,29 @@ class TreeSitterEngine:
                     # Check for API endpoint calls (consumer)
                     api_match = api_call_pattern.search(block)
                     if api_match:
-                        raw_endpoint = api_match.group(6) or api_match.group(0)
-                        http_verb = api_match.group("method") or api_match.group("ky_method") or api_match.group("client_method") or api_match.group("api_method") or api_match.group("http_method") or "GET"
-                        if "method: \"POST\"" in block or "method: 'POST'" in block or "method: `POST`" in block:
-                            http_verb = "POST"
-                        elif "method: \"DELETE\"" in block or "method: 'DELETE'" in block:
-                            http_verb = "DELETE"
-                        elif "method: \"PUT\"" in block or "method: 'PUT'" in block:
-                            http_verb = "PUT"
-                        elif "method: \"GET\"" in block or "method: 'GET'" in block:
-                            http_verb = "GET"
+                        raw_endpoint = api_match.group("url")
+                        if raw_endpoint and (raw_endpoint.startswith("http://") or raw_endpoint.startswith("https://") or raw_endpoint.startswith("/")):
+                            http_verb = api_match.group("method") or api_match.group("ky_method") or api_match.group("client_method") or api_match.group("http_method") or "GET"
+                            if "method: \"POST\"" in block or "method: 'POST'" in block or "method: `POST`" in block:
+                                http_verb = "POST"
+                            elif "method: \"DELETE\"" in block or "method: 'DELETE'" in block:
+                                http_verb = "DELETE"
+                            elif "method: \"PUT\"" in block or "method: 'PUT'" in block:
+                                http_verb = "PUT"
+                            elif "method: \"GET\"" in block or "method: 'GET'" in block:
+                                http_verb = "GET"
 
-                        cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_endpoint)
-                        route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
-                        meta["consumes_endpoint"] = route_m.group(1) if route_m else cleaned_endpoint
-                        meta["consumes_http_method"] = http_verb.upper()
+                            host_m = re.match(r'^https?://([^/]+)', raw_endpoint)
+                            if host_m:
+                                meta["target_base_url"] = host_m.group(1).lower()
 
-                    # Direct route literal fallback
-                    if "consumes_endpoint" not in meta:
-                        for direct_match in re.finditer(r'[\'"`](https?://[^/]+(/[^/]+.*?))[\'"`]|[\'"`](/(?:api/)?(?:v[0-9]+/)[a-zA-Z0-9_\-\/{}:]+)[\'"`]', block):
-                            target_url = direct_match.group(2) if direct_match.group(2) else direct_match.group(3)
-                            if target_url and not any(target_url.endswith(ext) for ext in ('.ts', '.js', '.tsx', '.jsx', '.json', '.html', '.css', '.png')):
-                                meta["consumes_endpoint"] = target_url
-                                meta["consumes_http_method"] = "POST" if ("post" in block.lower() or "POST" in block) else "GET"
-                                break
+                            cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_endpoint).split('?')[0].strip()
+                            route_m = re.search(r'(/(?:api/)?(?:v[0-9]+/)?(?:api/)?[a-zA-Z0-9_\-\/{}:]+)', cleaned_endpoint)
+                            final_ep = route_m.group(1) if route_m else cleaned_endpoint
+
+                            if final_ep and final_ep != "/" and not any(final_ep.endswith(ext) for ext in ('.ts', '.js', '.tsx', '.jsx', '.json', '.html', '.css', '.png', '.jpg')):
+                                meta["consumes_endpoint"] = final_ep
+                                meta["consumes_http_method"] = http_verb.upper()
 
                     node = CodeNode(
                         id=CodeNode.generate_id(repo, file_path, name, idx),
@@ -513,21 +513,38 @@ class TreeSitterEngine:
                 go_client_m = re.search(r'http\.(?:Get|Post)\s*\(\s*"([^"]+)"', block)
                 if go_client_m:
                     raw_ep = go_client_m.group(1)
-                    cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_ep)
-                    meta["consumes_endpoint"] = cleaned_endpoint
-                    meta["consumes_http_method"] = "POST" if "Post" in go_client_m.group(0) else "GET"
+                    if raw_ep and (raw_ep.startswith("http://") or raw_ep.startswith("https://") or raw_ep.startswith("/")):
+                        host_m = re.match(r'^https?://([^/]+)', raw_ep)
+                        if host_m:
+                            meta["target_base_url"] = host_m.group(1).lower()
+                        cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_ep).split('?')[0].strip()
+                        if cleaned_endpoint and cleaned_endpoint != "/":
+                            meta["consumes_endpoint"] = cleaned_endpoint
+                            meta["consumes_http_method"] = "POST" if "Post" in go_client_m.group(0) else "GET"
                 else:
                     go_req_m = re.search(r'http\.NewRequest(?:WithContext)?\s*\(\s*"(GET|POST|PUT|DELETE|PATCH)"\s*,\s*"([^"]+)"', block, re.IGNORECASE)
                     if go_req_m:
                         raw_ep = go_req_m.group(2)
-                        meta["consumes_endpoint"] = re.sub(r'^https?://[^/]+', '', raw_ep)
-                        meta["consumes_http_method"] = go_req_m.group(1).upper()
+                        if raw_ep and (raw_ep.startswith("http://") or raw_ep.startswith("https://") or raw_ep.startswith("/")):
+                            host_m = re.match(r'^https?://([^/]+)', raw_ep)
+                            if host_m:
+                                meta["target_base_url"] = host_m.group(1).lower()
+                            cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_ep).split('?')[0].strip()
+                            if cleaned_endpoint and cleaned_endpoint != "/":
+                                meta["consumes_endpoint"] = cleaned_endpoint
+                                meta["consumes_http_method"] = go_req_m.group(1).upper()
                     else:
                         client_m = re.search(r'(?:client|req|c)\.(Get|Post|Put|Delete)\s*\(\s*"([^"]+)"', block, re.IGNORECASE)
                         if client_m:
                             raw_ep = client_m.group(2)
-                            meta["consumes_endpoint"] = re.sub(r'^https?://[^/]+', '', raw_ep)
-                            meta["consumes_http_method"] = client_m.group(1).upper()
+                            if raw_ep and (raw_ep.startswith("http://") or raw_ep.startswith("https://") or raw_ep.startswith("/")):
+                                host_m = re.match(r'^https?://([^/]+)', raw_ep)
+                                if host_m:
+                                    meta["target_base_url"] = host_m.group(1).lower()
+                                cleaned_endpoint = re.sub(r'^https?://[^/]+', '', raw_ep).split('?')[0].strip()
+                                if cleaned_endpoint and cleaned_endpoint != "/":
+                                    meta["consumes_endpoint"] = cleaned_endpoint
+                                    meta["consumes_http_method"] = client_m.group(1).upper()
 
                 nodes.append(CodeNode(
                     id=node_id,

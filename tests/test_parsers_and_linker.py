@@ -241,3 +241,132 @@ def test_github_ingester_repo_name_extraction():
     assert GitHubRepoIngester.extract_repo_name("https://github.com/pallets/flask.git") == "flask"
     assert GitHubRepoIngester.extract_repo_name("https://github.com/fastapi/fastapi/") == "fastapi"
     assert GitHubRepoIngester.extract_repo_name("local/path/to/my_service") == "my_service"
+
+
+# =============================================================
+# 5. False Positive Elimination & Contract Precision Tests
+# =============================================================
+
+def test_root_path_and_utility_methods_emit_zero_contracts(parser, linker):
+    """Verify that utility functions and methods containing slashes emit zero false-positive contracts to root routes."""
+    # 1. Producer exposes GET / (health_check)
+    producer_node = CodeNode(
+        id="ai-heuristic-evaluation:main.py:health_check:10",
+        repo="ai-heuristic-evaluation",
+        file_path="main.py",
+        symbol_name="health_check",
+        symbol_type=SymbolType.ENDPOINT,
+        start_line=10,
+        end_line=15,
+        metadata={"endpoint_route": "/", "http_method": "GET"}
+    )
+
+    # 2. TypeScript file with various utility functions
+    ts_utils = """
+export function formatBytes(bytes: number, decimals = 2): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+export function toFirestore(data: any) {
+    // Converts data to Firestore format / schema
+    return { ...data, updatedAt: new Date() };
+}
+
+export function formatDate(d: Date): string {
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+export function isMacOS(): boolean {
+    return navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+}
+"""
+    nodes, _ = parser.parse_file("frontend-web", "src/utils/formatters.ts", ts_utils)
+    # Ensure none of these utilities were marked as consuming an API endpoint
+    for node in nodes:
+        assert "consumes_endpoint" not in node.metadata, f"Node {node.symbol_name} falsely identified as API consumer"
+
+    # Link against producer node
+    all_nodes = [producer_node] + nodes
+    edges = linker.link_repositories(all_nodes)
+    api_edges = [e for e in edges if e.edge_type == EdgeType.CONSUMES_API]
+    assert len(api_edges) == 0, f"Expected 0 CONSUMES_API edges, found {len(api_edges)}"
+
+
+def test_generic_and_builtin_symbols_no_cross_repo_calls(parser, linker):
+    """Verify that generic identifiers (request, data, open, test) do not link across repo boundaries."""
+    # Repo A defines a function or helper named 'request'
+    ruxailab_node = CodeNode(
+        id="RUXAILAB:request.py:request:5",
+        repo="RUXAILAB",
+        file_path="request.py",
+        symbol_name="request",
+        symbol_type=SymbolType.FUNCTION,
+        start_line=5,
+        end_line=12,
+        code_content="def request(url):\n    return None"
+    )
+
+    # Repo B uses Flask's built-in request object and standard library open()
+    sentiment_code = """
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+def analyze_sentiment():
+    payload = request.get_json()
+    with open("model_cache.txt") as f:
+        data = f.read()
+    return jsonify({"status": "ok"})
+"""
+    sentiment_nodes, _ = parser.parse_file("sentiment-analysis-api", "app.py", sentiment_code)
+    all_nodes = [ruxailab_node] + sentiment_nodes
+
+    edges = linker.link_repositories(all_nodes)
+    # Ensure there is NO call edge linking sentiment-analysis-api to RUXAILAB's request symbol
+    false_calls = [
+        e for e in edges
+        if e.edge_type == EdgeType.CALLS
+        and "sentiment-analysis-api" in e.caller_id
+        and "RUXAILAB" in e.callee_id
+    ]
+    assert len(false_calls) == 0, f"False cross-repo call edges found: {false_calls}"
+
+
+def test_legitimate_cross_repo_contracts_preserved(parser, linker):
+    """Verify that legitimate API contracts and SDK usages are properly linked."""
+    producer_node = CodeNode(
+        id="auth-service:auth.py:verify_token:20",
+        repo="auth-service",
+        file_path="src/auth.py",
+        symbol_name="verify_token",
+        symbol_type=SymbolType.ENDPOINT,
+        start_line=20,
+        end_line=30,
+        metadata={"endpoint_route": "/v1/auth/verify", "http_method": "POST"}
+    )
+
+    client_code = """
+import axios from 'axios';
+
+export async function checkSession(token: string) {
+    const res = await axios.post('/v1/auth/verify', { token });
+    return res.data;
+}
+"""
+    consumer_nodes, _ = parser.parse_file("portal-app", "src/services/auth.ts", client_code)
+    assert len(consumer_nodes) >= 1
+    consumer = [n for n in consumer_nodes if n.symbol_name == "checkSession"][0]
+    assert consumer.metadata.get("consumes_endpoint") == "/v1/auth/verify"
+    assert consumer.metadata.get("consumes_http_method") == "POST"
+
+    edges = linker.link_repositories([producer_node, consumer])
+    api_edges = [e for e in edges if e.edge_type == EdgeType.CONSUMES_API]
+    assert len(api_edges) == 1
+    assert api_edges[0].caller_id == consumer.id
+    assert api_edges[0].callee_id == producer_node.id
+

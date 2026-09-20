@@ -18,10 +18,18 @@ class OrgContextGenerator:
     def __init__(self, graph_store):
         self.store = graph_store
 
-    def analyze_organization(self) -> Dict[str, Any]:
-        """Analyzes all indexed repositories, symbols, and cross-repo links."""
-        nodes = self.store.get_all_nodes()
-        edges = self.store.get_all_edges()
+    def analyze_organization(self, filter_repos: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Analyzes all or a selected subset of indexed repositories, symbols, and cross-repo links."""
+        all_nodes = self.store.get_all_nodes()
+        all_edges = self.store.get_all_edges()
+        all_repo_names = sorted(list({n.repo for n in all_nodes}))
+
+        filter_set = set(r.strip() for r in filter_repos if r and r.strip()) if filter_repos else None
+
+        if filter_set:
+            nodes = [n for n in all_nodes if n.repo in filter_set]
+        else:
+            nodes = all_nodes
 
         # 1. Repository groupings
         repo_nodes = defaultdict(list)
@@ -46,12 +54,12 @@ class OrgContextGenerator:
             repo_languages[repo][lang] += 1
 
         # 2. Cross-repo contract analysis
-        node_lookup = {n.id: n for n in nodes}
+        node_lookup = {n.id: n for n in all_nodes}
         cross_repo_edges = []
         internal_edges = []
         repo_dependencies = defaultdict(lambda: defaultdict(int))
 
-        for e in edges:
+        for e in all_edges:
             caller_id = getattr(e, "caller_id", "") or (e.get("caller_id") if isinstance(e, dict) else "")
             callee_id = getattr(e, "callee_id", "") or (e.get("callee_id") if isinstance(e, dict) else "")
             edge_type = getattr(e, "edge_type", "") or (e.get("edge_type") if isinstance(e, dict) else "")
@@ -62,6 +70,10 @@ class OrgContextGenerator:
             callee_node = node_lookup.get(callee_id)
 
             if caller_node and callee_node:
+                # If filter is applied, only keep links where both ends are in the selected repositories
+                if filter_set and (caller_node.repo not in filter_set or callee_node.repo not in filter_set):
+                    continue
+
                 if caller_node.repo != callee_node.repo:
                     cross_repo_edges.append({
                         "caller_repo": caller_node.repo,
@@ -103,29 +115,40 @@ class OrgContextGenerator:
             })
 
         return {
+            "all_repositories": all_repo_names,
+            "selected_repositories": sorted(list(filter_set)) if filter_set else all_repo_names,
+            "is_filtered": bool(filter_set),
             "total_repositories": len(repo_nodes),
             "total_files": sum(len(f) for f in repo_files.values()),
             "total_symbols": len(nodes),
-            "total_edges": len(edges),
+            "total_edges": len(cross_repo_edges) + len(internal_edges),
             "cross_repo_contracts_count": len(cross_repo_edges),
             "repositories": repo_summaries,
             "cross_repo_contracts": cross_repo_edges,
             "repo_dependency_matrix": dict(repo_dependencies),
         }
 
-    def generate_ai_optimized_context(self) -> str:
+    def generate_ai_optimized_context(self, filter_repos: Optional[List[str]] = None) -> str:
         """
         Generates an ultra-compressed, deterministic plain text document (.txt)
         optimized specifically for AI agents (Cursor, Claude, Windsurf, VS Code).
-        Maximizes information density while keeping token overhead strictly minimal.
+        Can be scoped to a selected subset of repositories to focus cross-repo context.
         """
-        data = self.analyze_organization()
-        nodes = self.store.get_all_nodes()
+        data = self.analyze_organization(filter_repos=filter_repos)
+        selected_set = set(data["selected_repositories"])
+        all_nodes = self.store.get_all_nodes()
+        nodes = [n for n in all_nodes if n.repo in selected_set]
+
+        scope_header = (
+            f"# Scoped Subset: {', '.join(data['selected_repositories'])}"
+            if data["is_filtered"]
+            else f"# Total Repositories: {data['total_repositories']}"
+        )
 
         lines = [
             "# ===================================================================",
             "# CROSSCONTEXT FEDERATED ORGANIZATION CODEBASE BLUEPRINT",
-            f"# Generated for Autonomous AI Agents | Total Repositories: {data['total_repositories']}",
+            f"# Generated for Autonomous AI Agents | {scope_header}",
             "# ===================================================================",
             "",
             "## 1. REPOSITORY INVENTORY & ARCHITECTURAL ROLES",
@@ -151,7 +174,10 @@ class OrgContextGenerator:
                     f"[{c['callee_repo']}] {c['callee_file']}: `{c['callee_symbol']}`"
                 )
         else:
-            lines.append("- No cross-repo edges detected. Repositories operate as isolated modules.")
+            if data["is_filtered"]:
+                lines.append(f"- No cross-repo contracts detected between selected repositories ({', '.join(data['selected_repositories'])}).")
+            else:
+                lines.append("- No cross-repo edges detected. Repositories operate as isolated modules.")
 
         lines.extend([
             "",
@@ -177,7 +203,7 @@ class OrgContextGenerator:
             "# INSTRUCTIONS FOR CODING AGENT:",
             "# 1. When modifying an endpoint, verify all consumer files listed in Section 2.",
             "# 2. Use line numbers in Section 3 to request targeted diffs without reading entire files.",
-            "# 3. Never invent cross-repo communication protocols; adhere to contracts in Section 2.",
+            "# 3. Adhere strictly to the cross-repo contracts declared in Section 2.",
             "# ===================================================================",
         ])
 

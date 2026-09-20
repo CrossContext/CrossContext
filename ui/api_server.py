@@ -266,15 +266,21 @@ def discover_org_repositories(req: DiscoverOrgRequest):
 
 
 @app.get("/api/org/blueprint")
-def get_org_blueprint():
-    """Generates visual architecture metrics and raw AI-optimized context for IDEs."""
+def get_org_blueprint(repos: Optional[str] = None):
+    """Generates visual architecture metrics and raw AI-optimized context for IDEs.
+    Accepts optional comma-separated list of repository names to isolate correlation and contracts.
+    """
+    filter_repos = [r.strip() for r in repos.split(",") if r.strip()] if repos else None
     generator = OrgContextGenerator(store)
-    analysis = generator.analyze_organization()
-    ai_context = generator.generate_ai_optimized_context()
+    analysis = generator.analyze_organization(filter_repos=filter_repos)
+    ai_context = generator.generate_ai_optimized_context(filter_repos=filter_repos)
     return {
         "analysis": analysis,
         "ai_context": ai_context,
         "approx_tokens": len(ai_context) // 4,
+        "selected_repos": analysis.get("selected_repositories", []),
+        "all_repositories": analysis.get("all_repositories", []),
+        "is_filtered": analysis.get("is_filtered", False),
     }
 
 
