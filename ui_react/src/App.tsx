@@ -3747,20 +3747,38 @@ function EngineSettingsSidebar({
   cfg,
   onSave,
   onReindex,
+  onClearGraph,
 }: {
   open: boolean
   onClose: () => void
   cfg: EngineConfig
   onSave: (c: EngineConfig) => void
   onReindex: () => Promise<void>
+  onClearGraph?: () => Promise<void>
 }) {
   const [localCfg, setLocalCfg] = useState<EngineConfig>(cfg)
   const [reindexing, setReindexing] = useState(false)
   const [reindexMsg, setReindexMsg] = useState('')
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     setLocalCfg(cfg)
   }, [cfg])
+
+  const handleClearGraph = async () => {
+    setClearing(true)
+    setReindexMsg('')
+    try {
+      if (onClearGraph) {
+        await onClearGraph()
+      }
+      onClose()
+    } catch {
+      setReindexMsg('Error clearing knowledge graph.')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   const handleReindex = async () => {
     setReindexing(true)
@@ -3965,6 +3983,18 @@ function EngineSettingsSidebar({
             >
               {reindexing ? 're-indexing...' : '↻ Re-index Testbed Repositories'}
             </button>
+            <button
+              onClick={handleClearGraph}
+              disabled={clearing}
+              style={{
+                width: '100%', padding: '7px 0', fontFamily: 'var(--font-mono)', fontSize: 10,
+                background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+                borderRadius: 2, cursor: clearing ? 'not-allowed' : 'pointer', fontWeight: 600,
+                marginTop: 8,
+              }}
+            >
+              {clearing ? 'clearing...' : 'Clear Graph (Reset to New User)'}
+            </button>
             {reindexMsg && (
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#16a34a', marginTop: 4 }}>
                 {reindexMsg}
@@ -4041,6 +4071,26 @@ export default function App() {
     if (res.ok) {
       await loadData()
     }
+  }
+
+  const handleClearGraph = async () => {
+    try {
+      await fetch(`${API_BASE}/api/repos/clear`, { method: 'POST' })
+    } catch {
+      // Offline fallback
+    }
+    setGraphNodes([])
+    setGraphEdges([])
+    setStats({
+      ...DEFAULT_STATS,
+      repositories: [],
+      total_symbols: 0,
+      total_edges: 0,
+      cross_repo_edges: 0,
+    })
+    setSelectedNode(null)
+    setRepoName('')
+    setDataVersion(v => v + 1)
   }
 
   const availableRepos = stats.repositories || []
@@ -4340,6 +4390,7 @@ export default function App() {
         cfg={engineConfig}
         onSave={setEngineConfig}
         onReindex={handleReindex}
+        onClearGraph={handleClearGraph}
       />
 
       <style>{`

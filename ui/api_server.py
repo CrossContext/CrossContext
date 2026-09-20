@@ -55,18 +55,18 @@ ingester = GitHubRepoIngester()
 diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
 bedrock_client = BedrockClient()
 
-# Ensure default testbed is indexed on startup if empty
+# Retain clean database for new users - do not auto-seed demo testbed data
 def _bootstrap():
-    nodes = store.get_all_nodes()
-    if not nodes:
-        testbeds = {
-            "repo_auth_core": str(PROJECT_ROOT / "testbed" / "repo_auth_core"),
-            "repo_frontend_portal": str(PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
-            "repo_shared_sdk": str(PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
-        }
-        agent.tool_manager.index_repositories(testbeds, clear_existing=True)
+    pass
 
 _bootstrap()
+
+
+@app.post("/api/repos/clear")
+def clear_all_repositories():
+    """Wipes all indexed repositories, AST nodes, and edges to reset to clean new-user state."""
+    store.clear()
+    return {"status": "success", "message": "Knowledge graph successfully wiped."}
 
 
 # --- Pydantic Request Models ---
