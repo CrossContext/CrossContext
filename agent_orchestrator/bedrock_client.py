@@ -30,7 +30,9 @@ class BedrockClient:
         """Lazy-loads and caches boto3 bedrock-runtime client."""
         if self._client is None:
             import boto3
-            self._client = boto3.client("bedrock-runtime", region_name=self.region)
+            from botocore.config import Config
+            cfg = Config(connect_timeout=4, read_timeout=6, retries={"max_attempts": 1})
+            self._client = boto3.client("bedrock-runtime", region_name=self.region, config=cfg)
         return self._client
 
     def check_connection(self) -> Dict[str, Any]:
