@@ -16,11 +16,13 @@ from common.models import CodeNode, SymbolType
 
 
 class TitanEmbeddingClient:
-    """Invokes Amazon Bedrock Titan Text Embeddings v2."""
+    """Invokes Amazon Bedrock Titan Text Embeddings v2 with circuit breaker fallback."""
     def __init__(self, region_name: str = "us-east-1"):
         self.region_name = region_name
         self.model_id = os.getenv("BEDROCK_EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0")
         self._client = None
+        self._bedrock_available: Optional[bool] = None
+        self._last_error_time: float = 0
 
     def _get_client(self):
         if self._client is None:
@@ -29,6 +31,13 @@ class TitanEmbeddingClient:
         return self._client
 
     def generate_embedding(self, text: str, dimensions: int = 1024) -> List[float]:
+        # Circuit breaker: If Bedrock failed recently (within 60s), use fast deterministic fallback
+        if self._bedrock_available is False:
+            if time.time() - self._last_error_time < 60:
+                return self._fallback_pseudo_embedding(text, dimensions)
+            else:
+                self._bedrock_available = None  # Reset circuit breaker
+
         try:
             client = self._get_client()
             payload = {
@@ -43,9 +52,12 @@ class TitanEmbeddingClient:
                 body=json.dumps(payload)
             )
             body = json.loads(response["body"].read())
+            self._bedrock_available = True
             return body["embedding"]
-        except Exception as e:
-            # If Bedrock invocation fails (e.g., credentials missing), fallback to deterministic pseudo-embedding
+        except Exception:
+            # Trip circuit breaker on failure to prevent 3000+ sequential HTTP timeouts
+            self._bedrock_available = False
+            self._last_error_time = time.time()
             return self._fallback_pseudo_embedding(text, dimensions)
 
     @staticmethod
