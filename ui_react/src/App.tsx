@@ -1712,35 +1712,7 @@ function AgentPanel({
     setRunning(true)
     setLiveSteps([])
 
-    // Check if query is generic/conceptual vs codebase-specific
-    const isConceptual = /^(what|how|why|explain|tell|who|describe)\b/i.test(q) ||
-      q.toLowerCase().includes('blast radius') ||
-      q.toLowerCase().includes('crosscontext') ||
-      q.toLowerCase().includes('what is') ||
-      q.toLowerCase().includes('how does') ||
-      q.toLowerCase().includes('how do')
-
-    if (nodes.length === 0 || isConceptual) {
-      setThinkingStatus('ContextBot is thinking...')
-    } else {
-      setThinkingStatus('ContextBot is analyzing multi-repository AST graph...')
-    }
-
-    // If 0 repos are indexed and task requires a codebase, guide to ingest
-    if (nodes.length === 0 && !isConceptual) {
-      setTimeout(() => {
-        const botMsg: ChatMessage = {
-          id: `bot-${Date.now()}`,
-          sender: 'bot',
-          text: 'No repositories are currently indexed in CrossContext.\n\nTo analyze specific symbol definitions, trace call graphs, or calculate blast radius, please ingest your repositories first using the button below or by choosing an example organization (meshery, kubernetes, django, or vlc).',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          needsIngest: true,
-        }
-        setChatHistory(prev => [...prev, botMsg])
-        setRunning(false)
-      }, 400)
-      return
-    }
+    setThinkingStatus(nodes.length === 0 ? 'ContextBot is thinking...' : 'ContextBot is analyzing multi-repository AST graph...')
 
     try {
       const res = await fetch(`${API_BASE}/api/agent/run`, {
