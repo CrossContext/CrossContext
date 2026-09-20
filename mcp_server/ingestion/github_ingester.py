@@ -275,6 +275,7 @@ class GitHubRepoIngester:
         urls_or_paths: List[str],
         tool_manager: CodeGraphToolManager,
         clear_existing: bool = True,
+        include_all: bool = True,
         progress_cb: Optional[Callable[[str, str, float], None]] = None
     ) -> Dict[str, Any]:
         """
@@ -315,7 +316,7 @@ class GitHubRepoIngester:
             progress_cb("parsing", f"Parsing AST boundaries across {len(repo_paths)} repositories...", 0.7)
 
         # Index the repositories into the CodeGraphToolManager
-        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing, progress_cb=progress_cb)
+        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing, include_all=include_all, progress_cb=progress_cb)
 
         if progress_cb:
             progress_cb(

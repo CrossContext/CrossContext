@@ -2608,6 +2608,7 @@ function IngestModal({
   const [orgInput, setOrgInput] = useState('')
   const [customUrls, setCustomUrls] = useState('')
   const [wipeExisting, setWipeExisting] = useState(true)
+  const [includeAll, setIncludeAll] = useState(true)
   const [loading, setLoading] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [discoveredRepos, setDiscoveredRepos] = useState<string[]>([])
@@ -2696,7 +2697,7 @@ function IngestModal({
       const res = await fetch(`${API_BASE}/api/repos/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
+        body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting, include_all: includeAll }),
       })
       const startData = await res.json()
 
@@ -3056,18 +3057,33 @@ function IngestModal({
               </div>
             )}
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1 }}>
-              <input
-                type="checkbox"
-                checked={wipeExisting}
-                disabled={isBusy}
-                onChange={e => setWipeExisting(e.target.checked)}
-                style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
-              />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
-                Wipe existing graph & replace
-              </span>
-            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '2px 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={includeAll}
+                  disabled={isBusy}
+                  onChange={e => setIncludeAll(e.target.checked)}
+                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+                />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-main)', fontWeight: 600 }}>
+                  Deep Full Ingestion (Parse all files, tests, scripts, subdirectories & notebooks)
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={wipeExisting}
+                  disabled={isBusy}
+                  onChange={e => setWipeExisting(e.target.checked)}
+                  style={{ cursor: isBusy ? 'not-allowed' : 'pointer', accentColor: '#111' }}
+                />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>
+                  Wipe existing graph & replace
+                </span>
+              </label>
+            </div>
 
             {statusMsg && (
               <div style={{

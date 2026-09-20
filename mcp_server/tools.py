@@ -19,7 +19,7 @@ class CodeGraphToolManager:
         self.parser = TreeSitterEngine()
         self.linker = CrossRepoLinker()
 
-    def index_repositories(self, repo_paths: Dict[str, str], clear_existing: bool = False, progress_cb: Optional[Any] = None) -> Dict[str, Any]:
+    def index_repositories(self, repo_paths: Dict[str, str], clear_existing: bool = False, include_all: bool = True, progress_cb: Optional[Any] = None) -> Dict[str, Any]:
         """
         Ingests and indexes multiple repositories.
         repo_paths: {"repo_auth_core": "path/to/repo_auth_core", ...}
@@ -31,7 +31,7 @@ class CodeGraphToolManager:
         for idx, (repo_name, path) in enumerate(repo_paths.items()):
             if progress_cb:
                 progress_cb("parsing", f"Parsing AST symbols in {repo_name} ({idx+1}/{total_repos})...", 0.5 + (0.2 * (idx / max(total_repos, 1))))
-            nodes, edges = self.parser.parse_directory(repo_name, path, progress_cb=progress_cb)
+            nodes, edges = self.parser.parse_directory(repo_name, path, include_all=include_all, progress_cb=progress_cb)
             all_nodes.extend(nodes)
             all_edges.extend(edges)
 

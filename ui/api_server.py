@@ -79,6 +79,7 @@ class AgentRunRequest(BaseModel):
 class IngestRequest(BaseModel):
     urls: List[str]
     clear_existing: bool = True
+    include_all: bool = True
 
 
 class DiscoverOrgRequest(BaseModel):
@@ -271,7 +272,7 @@ _ingest_state: Dict[str, Any] = {
 }
 
 
-def _run_ingest_sync(urls: List[str], clear_existing: bool):
+def _run_ingest_sync(urls: List[str], clear_existing: bool, include_all: bool = True):
     """Runs clone + index in a background thread. Updates _ingest_state as it progresses."""
     global _ingest_state
     _ingest_state["running"] = True
@@ -286,6 +287,7 @@ def _run_ingest_sync(urls: List[str], clear_existing: bool):
             urls,
             agent.tool_manager,
             clear_existing=clear_existing,
+            include_all=include_all,
             progress_cb=progress_cb,
         )
         _ingest_state["result"] = res
@@ -313,7 +315,7 @@ async def ingest_repositories(req: IngestRequest):
         }
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing)
+    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing, req.include_all)
 
     return {
         "status": "started",
