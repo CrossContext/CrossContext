@@ -397,6 +397,7 @@ function CrossRepoGraph({
             
             <button
               onClick={() => setRepoFilter(null)}
+              title={`All ${repos.length} repositories (${nodes.length} symbols)`}
               style={{
                 padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
                 background: repoFilter === null ? '#111' : 'white',
@@ -406,7 +407,7 @@ function CrossRepoGraph({
                 borderRadius: 2, cursor: 'pointer', fontWeight: repoFilter === null ? 600 : 400,
               }}
             >
-              all repos ({nodes.length})
+              all repos ({repos.length})
             </button>
 
             {/* Currently Active Filter Pill if a specific repo is filtered */}
@@ -482,6 +483,7 @@ function CrossRepoGraph({
                   <button
                     key={r}
                     onClick={() => setRepoFilter(active ? null : r)}
+                    title={`${count} AST symbols in ${r.replace('repo_', '')}`}
                     style={{
                       padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
                       background: active ? col : 'white',
@@ -490,7 +492,7 @@ function CrossRepoGraph({
                       borderRadius: 2, cursor: 'pointer',
                     }}
                   >
-                    {r.replace('repo_', '')} ({count})
+                    {r.replace('repo_', '')} ({count} sym)
                   </button>
                 )
               })}

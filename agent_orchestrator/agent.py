@@ -195,7 +195,10 @@ class CrossContextAgent:
                 t_start = time.time()
                 handler = self._tool_dispatch.get(tool_name)
                 if handler:
-                    result = handler(tool_args)
+                    try:
+                        result = handler(tool_args)
+                    except Exception as e:
+                        result = {"error": f"Tool '{tool_name}' execution failed: {e}"}
                 else:
                     result = {"error": f"Tool '{tool_name}' not recognized."}
                 duration_ms = (time.time() - t_start) * 1000.0
