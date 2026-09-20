@@ -1431,7 +1431,7 @@ function AgentPanel({
 
 // ── Benchmarks View ───────────────────────────────────────────────────────────
 
-function BenchmarksView() {
+function BenchmarksView({ dataVersion }: { dataVersion?: number }) {
   const [liveBench, setLiveBench] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -1443,7 +1443,7 @@ function BenchmarksView() {
   const [simResult, setSimResult] = useState<any>(null)
   const [lastEvaluatedAt, setLastEvaluatedAt] = useState<string>('')
 
-  const fetchLiveBenchmarks = async () => {
+  const fetchLiveBenchmarks = useCallback(async () => {
     setLoading(true)
     setProgress(15)
     try {
@@ -1467,11 +1467,11 @@ function BenchmarksView() {
       setLoading(false)
       setProgress(0)
     }, 300)
-  }
+  }, [])
 
   useEffect(() => {
     fetchLiveBenchmarks()
-  }, [])
+  }, [dataVersion, fetchLiveBenchmarks])
 
   const runSimulation = () => {
     if (simRunning) return
@@ -1937,20 +1937,17 @@ function BenchmarksView() {
 
 // ── Org Blueprint & AI Context View ───────────────────────────────────────────
 
-function OrgBlueprintView() {
+function OrgBlueprintView({ dataVersion }: { dataVersion?: number }) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [selectedRepos, setSelectedRepos] = useState<string[]>([])
   const [availableRepos, setAvailableRepos] = useState<string[]>([])
-  const [initialized, setInitialized] = useState(false)
 
-  const loadBlueprint = useCallback(async (reposToFilter?: string[], overrideAvailable?: string[]) => {
+  const loadBlueprint = useCallback(async (reposToFilter?: string[]) => {
     setLoading(true)
     try {
-      const currentAvailable = overrideAvailable || availableRepos
-      const hasFilter = reposToFilter && reposToFilter.length > 0 && currentAvailable.length > 0 && reposToFilter.length < currentAvailable.length
-      const url = hasFilter
+      const url = reposToFilter && reposToFilter.length > 0
         ? `http://localhost:8000/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
         : 'http://localhost:8000/api/org/blueprint'
 
@@ -1959,21 +1956,22 @@ function OrgBlueprintView() {
       setData(d)
 
       const all = d.all_repositories || (d.analysis?.repositories ? d.analysis.repositories.map((r: any) => r.repo_name) : [])
-      if (all && all.length > 0 && !initialized) {
+      if (all && all.length > 0) {
         setAvailableRepos(all)
-        setSelectedRepos(all)
-        setInitialized(true)
+        if (!reposToFilter) {
+          setSelectedRepos(all)
+        }
       }
     } catch {
       // Retain existing state on fetch failure
     } finally {
       setLoading(false)
     }
-  }, [availableRepos, initialized])
+  }, [])
 
   useEffect(() => {
     loadBlueprint()
-  }, [])
+  }, [dataVersion, loadBlueprint])
 
   const handleToggleRepo = (repoName: string) => {
     const next = selectedRepos.includes(repoName)
@@ -2345,7 +2343,7 @@ function OrgBlueprintView() {
 
 // ── Interactive Code & File Explorer View ─────────────────────────────────────
 
-function CodeExplorerView({ repos }: { repos: string[] }) {
+function CodeExplorerView({ repos, dataVersion }: { repos: string[]; dataVersion?: number }) {
   const [selectedRepo, setSelectedRepo] = useState(repos[0] || '')
   const [fileList, setFileList] = useState<string[]>([])
   const [fileSearch, setFileSearch] = useState('')
@@ -2354,12 +2352,12 @@ function CodeExplorerView({ repos }: { repos: string[] }) {
   const [loadingFile, setLoadingFile] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // Sync selectedRepo when repos prop updates
+  // Sync selectedRepo when repos prop or dataVersion updates
   useEffect(() => {
     if (repos.length > 0 && (!selectedRepo || !repos.includes(selectedRepo))) {
       setSelectedRepo(repos[0])
     }
-  }, [repos, selectedRepo])
+  }, [repos, selectedRepo, dataVersion])
 
   // Fetch all graph nodes to derive unique files for selected repo
   useEffect(() => {
@@ -2381,7 +2379,7 @@ function CodeExplorerView({ repos }: { repos: string[] }) {
         }
       })
       .catch(() => {})
-  }, [selectedRepo])
+  }, [selectedRepo, dataVersion])
 
   // Fetch content when file changes
   useEffect(() => {
@@ -2719,11 +2717,15 @@ function IngestModal({
 
   const handleCloseModal = () => {
     if (isBusy) return
+    const hadSummary = !!ingestSummary
     setIngestSummary(null)
     setDiscoveredRepos([])
     setSelectedOrgRepos([])
     setStatusMsg('')
     onClose()
+    if (hadSummary) {
+      onIngestSuccess()
+    }
   }
 
   const handleGoToBlueprint = () => {
@@ -2733,6 +2735,7 @@ function IngestModal({
     setSelectedOrgRepos([])
     setStatusMsg('')
     onClose()
+    onIngestSuccess()
     if (onNavigateToBlueprint) {
       onNavigateToBlueprint()
     }
@@ -3374,6 +3377,7 @@ export default function App() {
   const [ingestModalOpen, setIngestModalOpen] = useState(false)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [engineConfig, setEngineConfig] = useState<EngineConfig>(DEFAULT_ENGINE)
+  const [dataVersion, setDataVersion] = useState(0)
 
   // Live state from backend
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>(FALLBACK_NODES)
@@ -3403,11 +3407,10 @@ export default function App() {
       const graphRes = await fetch('http://localhost:8000/api/graph')
       if (graphRes.ok) {
         const g = await graphRes.json()
-        if (g.nodes && g.nodes.length > 0) {
-          setGraphNodes(g.nodes)
-          setGraphEdges(g.edges)
-        }
+        setGraphNodes(g.nodes || [])
+        setGraphEdges(g.edges || [])
       }
+      setDataVersion(v => v + 1)
     } catch {
       // Fallback
     }
@@ -3672,19 +3675,19 @@ export default function App() {
 
         {tab === 'blueprint' && (
           <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
-            <OrgBlueprintView />
+            <OrgBlueprintView dataVersion={dataVersion} />
           </div>
         )}
 
         {tab === 'explorer' && (
           <div style={{ height: '100%', overflow: 'hidden' }}>
-            <CodeExplorerView repos={availableRepos} />
+            <CodeExplorerView repos={availableRepos} dataVersion={dataVersion} />
           </div>
         )}
 
         {tab === 'benchmarks' && (
           <div style={{ height: '100%', overflowY: 'auto', background: 'var(--color-surface)' }}>
-            <BenchmarksView />
+            <BenchmarksView dataVersion={dataVersion} />
           </div>
         )}
       </main>
@@ -3693,9 +3696,11 @@ export default function App() {
       <IngestModal
         open={ingestModalOpen}
         onClose={() => setIngestModalOpen(false)}
-        onIngestSuccess={loadData}
-        onNavigateToBlueprint={() => {
-          loadData()
+        onIngestSuccess={async () => {
+          await loadData()
+        }}
+        onNavigateToBlueprint={async () => {
+          await loadData()
           setTab('blueprint')
         }}
       />

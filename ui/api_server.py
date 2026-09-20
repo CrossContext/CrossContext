@@ -321,8 +321,8 @@ def get_file_content(repo: str, file_path: str):
 @app.get("/api/benchmarks")
 def get_benchmarks():
     """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics."""
-    res1 = run_repoqa_benchmark()
-    res2 = run_codescale_benchmark()
+    res1 = run_repoqa_benchmark(store=store)
+    res2 = run_codescale_benchmark(store=store)
 
     return {
         "repoqa": {
