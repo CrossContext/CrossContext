@@ -136,6 +136,7 @@ function CrossRepoGraph({
   const [priorityTab, setPriorityTab] = useState<'endpoint' | 'class' | 'function'>('endpoint')
   const [searchQuery, setSearchQuery] = useState('')
   const [showRightPanel, setShowRightPanel] = useState(true)
+  const [showScopeList, setShowScopeList] = useState(false)
 
   const repos = useMemo(() => Array.from(new Set(nodes.map(n => n.repo))), [nodes])
 
@@ -383,59 +384,118 @@ function CrossRepoGraph({
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
         {/* Canvas Toolbar */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-          borderBottom: '1px solid var(--color-border)', flexShrink: 0, flexWrap: 'wrap',
+          display: 'flex', flexDirection: 'column',
+          borderBottom: '1px solid var(--color-border)', flexShrink: 0,
           background: 'white', zIndex: 10,
         }}>
-          <span style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', fontSize: 10, marginRight: 2 }}>scope:</span>
-          <button
-            onClick={() => setRepoFilter(null)}
-            style={{
-              padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
-              background: repoFilter === null ? '#111' : 'white',
-              color: repoFilter === null ? 'white' : 'var(--color-text-muted)',
-              border: '1px solid',
-              borderColor: repoFilter === null ? '#111' : 'var(--color-border)',
-              borderRadius: 2, cursor: 'pointer',
-            }}
-          >
-            all repos ({nodes.length})
-          </button>
-          {repos.map(r => {
-            const col = getRepoColor(r).main
-            const active = repoFilter === r
-            const count = nodes.filter(n => n.repo === r).length
-            return (
+          {/* Main Top Bar */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+            minHeight: 36,
+          }}>
+            <span style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', fontSize: 10, marginRight: 2 }}>scope:</span>
+            
+            <button
+              onClick={() => setRepoFilter(null)}
+              style={{
+                padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                background: repoFilter === null ? '#111' : 'white',
+                color: repoFilter === null ? 'white' : 'var(--color-text-muted)',
+                border: '1px solid',
+                borderColor: repoFilter === null ? '#111' : 'var(--color-border)',
+                borderRadius: 2, cursor: 'pointer', fontWeight: repoFilter === null ? 600 : 400,
+              }}
+            >
+              all repos ({nodes.length})
+            </button>
+
+            {/* Currently Active Filter Pill if a specific repo is filtered */}
+            {repoFilter && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                background: getRepoColor(repoFilter).main, color: 'white',
+                borderRadius: 2, fontWeight: 600,
+              }}>
+                <span>{repoFilter.replace('repo_', '')}</span>
+                <span
+                  onClick={(e) => { e.stopPropagation(); setRepoFilter(null); }}
+                  style={{ cursor: 'pointer', opacity: 0.85, fontSize: 12, lineHeight: 1 }}
+                  title="Clear filter"
+                >
+                  &times;
+                </span>
+              </div>
+            )}
+
+            {/* Scope List Toggle Button for Large Orgs */}
+            {repos.length > 0 && (
               <button
-                key={r}
-                onClick={() => setRepoFilter(active ? null : r)}
+                onClick={() => setShowScopeList(v => !v)}
+                title={showScopeList ? 'Hide repository scope filters' : 'Show repository scope filters'}
                 style={{
-                  padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                  background: active ? col : 'white',
-                  color: active ? 'white' : 'var(--color-text-muted)',
-                  border: `1px solid ${active ? col : 'var(--color-border)'}`,
+                  padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                  background: showScopeList ? '#f3f4f6' : 'white',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 2, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  fontWeight: 500,
                 }}
               >
-                {r.replace('repo_', '')} ({count})
+                <span>{showScopeList ? 'Hide scope tags' : `Filter by repo (${repos.length})`}</span>
+                <span style={{ fontSize: 8 }}>{showScopeList ? '▲' : '▼'}</span>
               </button>
-            )
-          })}
+            )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => setShowRightPanel(v => !v)}
-              style={{
-                padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
-                background: showRightPanel ? 'var(--color-surface-2)' : 'white',
-                color: '#111', border: '1px solid var(--color-border-bright)',
-                borderRadius: 2, cursor: 'pointer', fontWeight: 600,
-              }}
-              title="Toggle relation priority matrix panel"
-            >
-              {showRightPanel ? 'Hide Priority List' : 'Show Priority List'}
-            </button>
+            {/* Right Side Tools */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {!showRightPanel && (
+                <button
+                  onClick={() => setShowRightPanel(true)}
+                  style={{
+                    padding: '3px 8px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                    background: 'white',
+                    color: '#111', border: '1px solid var(--color-border-bright)',
+                    borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+                  }}
+                  title="Show priority list"
+                >
+                  Show Priority List
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Expandable Scrollable Scope Tags Box (Max Height 110px to never flood screen) */}
+          {showScopeList && repos.length > 0 && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 12px 8px',
+              maxHeight: 110, overflowY: 'auto',
+              background: '#fcfcfc', borderTop: '1px solid var(--color-border)',
+            }}>
+              {repos.map(r => {
+                const col = getRepoColor(r).main
+                const active = repoFilter === r
+                const count = nodes.filter(n => n.repo === r).length
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setRepoFilter(active ? null : r)}
+                    style={{
+                      padding: '2px 7px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                      background: active ? col : 'white',
+                      color: active ? 'white' : 'var(--color-text-muted)',
+                      border: `1px solid ${active ? col : 'var(--color-border)'}`,
+                      borderRadius: 2, cursor: 'pointer',
+                    }}
+                  >
+                    {r.replace('repo_', '')} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* 2D Canvas Viewport */}
@@ -819,15 +879,55 @@ function CrossRepoGraph({
         }}>
           {/* Panel Header */}
           <div style={{
-            padding: '10px 14px',
+            padding: '10px 12px',
             borderBottom: '1px solid var(--color-border)',
             background: 'var(--color-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 4 }}>
-              RELATION PRIORITY MATRIX
-            </div>
-            <div style={{ fontSize: 11, color: '#111', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-              Ranked by Multi-Repo Dependencies
+            {/* Top-left button to hide priority list with tooltip on hover */}
+            <button
+              onClick={() => setShowRightPanel(false)}
+              title="Hide priority list"
+              aria-label="Hide priority list"
+              style={{
+                background: 'white',
+                border: '1px solid var(--color-border)',
+                borderRadius: 3,
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--color-text-muted)',
+                flexShrink: 0,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#dc2626'
+                e.currentTarget.style.color = '#dc2626'
+                e.currentTarget.style.background = '#fef2f2'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border)'
+                e.currentTarget.style.color = 'var(--color-text-muted)'
+                e.currentTarget.style.background = 'white'
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-dim)', letterSpacing: 1, marginBottom: 2 }}>
+                RELATION PRIORITY MATRIX
+              </div>
+              <div style={{ fontSize: 11, color: '#111', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Ranked by Multi-Repo Dependencies
+              </div>
             </div>
           </div>
 
