@@ -2669,35 +2669,60 @@ function IngestModal({
 
     setLoading(true)
     try {
-      setStatusMsg(`Cloning & indexing ${targetUrls.length} repositories into deterministic AST graph...`)
+      setStatusMsg(`Starting ingestion of ${targetUrls.length} repositories...`)
       const res = await fetch(`${API_BASE}/api/repos/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting }),
       })
-      const data = await res.json()
-      if (data.status === 'success') {
-        const repoList = data.repositories && data.repositories.length > 0
-          ? data.repositories
-          : targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
+      const startData = await res.json()
 
-        setIngestSummary({
-          org: orgInput.trim() || 'Custom Repository Set',
-          repositories: repoList,
-          indexed_nodes: data.indexed_nodes || 0,
-          cross_repo_edges: data.cross_repo_edges || 0,
-          internal_edges: data.internal_edges || 0,
-          errors: data.errors || [],
-        })
+      if (startData.status === 'already_running') {
+        setStatusMsg('An ingestion job is already running. Please wait for it to finish.')
         setLoading(false)
-        setStatusMsg('')
-        onIngestSuccess()
-      } else {
-        setStatusMsg(`Ingestion failed: ${data.errors ? data.errors.join(', ') : 'Unknown error'}`)
-        setLoading(false)
+        return
       }
+
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_BASE}/api/repos/ingest/status`)
+          const statusData = await statusRes.json()
+          setStatusMsg(statusData.progress || 'Processing...')
+
+          if (!statusData.running && statusData.complete) {
+            clearInterval(pollInterval)
+            if (statusData.status === 'success') {
+              const repoList = statusData.repositories && statusData.repositories.length > 0
+                ? statusData.repositories
+                : targetUrls.map((u: string) => u.split('/').pop()?.replace('.git', '') || u)
+
+              setIngestSummary({
+                org: orgInput.trim() || 'Custom Repository Set',
+                repositories: repoList,
+                indexed_nodes: statusData.indexed_nodes || 0,
+                cross_repo_edges: statusData.cross_repo_edges || 0,
+                internal_edges: statusData.internal_edges || 0,
+                errors: statusData.errors || [],
+              })
+              setLoading(false)
+              setStatusMsg('')
+              onIngestSuccess()
+            } else if (statusData.status === 'error') {
+              setStatusMsg(`Ingestion failed: ${statusData.error || 'Unknown error'}`)
+              setLoading(false)
+            } else {
+              setStatusMsg(`Ingestion completed with status: ${statusData.status || 'unknown'}`)
+              setLoading(false)
+              onIngestSuccess()
+            }
+          }
+        } catch {
+          // Keep polling even if a single status check fails
+        }
+      }, 2000)
     } catch (e: any) {
-      setStatusMsg(`Error during ingestion: ${e.message}`)
+      setStatusMsg(`Error starting ingestion: ${e.message}`)
       setLoading(false)
     }
   }

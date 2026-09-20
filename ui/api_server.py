@@ -258,18 +258,89 @@ def generate_cross_repo_diffs(req: AgentRunRequest):
     return res
 
 
+# --- Background ingestion task state ---
+_ingest_state: Dict[str, Any] = {
+    "running": False,
+    "progress": "",
+    "result": None,
+    "error": None,
+}
+
+
+def _run_ingest_sync(urls: List[str], clear_existing: bool):
+    """Runs clone + index in a background thread. Updates _ingest_state as it progresses."""
+    global _ingest_state
+    _ingest_state["running"] = True
+    _ingest_state["progress"] = f"Starting ingestion of {len(urls)} repositories..."
+    _ingest_state["result"] = None
+    _ingest_state["error"] = None
+    try:
+        def progress_cb(stage: str, msg: str, pct: float):
+            _ingest_state["progress"] = msg
+
+        res = ingester.ingest_repositories(
+            urls,
+            agent.tool_manager,
+            clear_existing=clear_existing,
+            progress_cb=progress_cb,
+        )
+        _ingest_state["result"] = res
+        _ingest_state["progress"] = "Ingestion complete."
+    except Exception as e:
+        _ingest_state["error"] = str(e)
+        _ingest_state["progress"] = f"Ingestion failed: {e}"
+    finally:
+        _ingest_state["running"] = False
+
+
 @app.post("/api/repos/ingest")
-def ingest_repositories(req: IngestRequest):
-    """Clones and indexes dynamic GitHub repositories."""
+async def ingest_repositories(req: IngestRequest):
+    """Clones and indexes dynamic GitHub repositories in a background thread.
+    Returns immediately so the UI stays responsive. Poll /api/repos/ingest/status for progress.
+    """
     if not req.urls:
         raise HTTPException(status_code=400, detail="At least one repository URL is required")
 
-    res = ingester.ingest_repositories(
-        req.urls,
-        agent.tool_manager,
-        clear_existing=req.clear_existing,
-    )
-    return res
+    if _ingest_state["running"]:
+        return {
+            "status": "already_running",
+            "message": "An ingestion job is already in progress.",
+            "progress": _ingest_state["progress"],
+        }
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing)
+
+    return {
+        "status": "started",
+        "message": f"Ingestion of {len(req.urls)} repositories started in background. Poll /api/repos/ingest/status for progress.",
+        "progress": _ingest_state["progress"],
+    }
+
+
+@app.get("/api/repos/ingest/status")
+def ingest_status():
+    """Returns the current status of the background ingestion job."""
+    if _ingest_state["result"]:
+        return {
+            "running": _ingest_state["running"],
+            "progress": _ingest_state["progress"],
+            "complete": True,
+            **_ingest_state["result"],
+        }
+    if _ingest_state["error"]:
+        return {
+            "running": False,
+            "progress": _ingest_state["progress"],
+            "complete": True,
+            "status": "error",
+            "error": _ingest_state["error"],
+        }
+    return {
+        "running": _ingest_state["running"],
+        "progress": _ingest_state["progress"],
+        "complete": not _ingest_state["running"] and _ingest_state["result"] is None and _ingest_state["error"] is None,
+    }
 
 
 class DiscoverOrgRequest(BaseModel):
