@@ -2,7 +2,7 @@
 
 **Target Duration**: 3:00 (180 seconds)  
 **Format**: `Spoken (Before Action)` -> `Action (What To Do)` -> `Spoken (After Action)`  
-**Subject Repositories**: `ruxailab` ecosystem (`RUXAILAB`, `eye-tracker-api`, `web-eye-tracker-front`)  
+**Subject Repositories**: Open-source `ruxailab` ecosystem (`RUXAILAB`, `eye-tracker-api`, `web-eye-tracker-front`)  
 
 ---
 
@@ -26,7 +26,7 @@
 ### Part 2: Dynamic Multi-Repo Ingestion (0:25 - 0:50)
 
 * **Spoken (Before Action)**:
-  > "Let's see this in action on a real-world multi-repository codebase from the `ruxailab` organization."
+  > "Let's see this in action on a real-world multi-repository codebase from the open-source `ruxailab` organization."
 
 * **Action**:
   > 1. Click the **+ Ingest Repos** button in the top navigation.
@@ -35,7 +35,7 @@
   > 4. Click **Ingest Selected (3) Repositories**.
 
 * **Spoken (After Action)**:
-  > "In just seconds, CrossContext parses the abstract syntax trees of our Python backend, Vue frontend, and core libraries, extracting symbols and discovering cross-repository API contracts automatically."
+  > "In just seconds, CrossContext parses the abstract syntax trees of the Python backend, Vue frontend, and core libraries, extracting symbols and discovering cross-repository API contracts automatically."
 
 ---
 
@@ -63,14 +63,14 @@
   > Click on the **Architecture Blueprint** tab in the top navigation bar. Scroll through the Inter-Repository API Contract Matrix.
 
 * **Spoken (After Action)**:
-  > "Here is our live contract matrix: frontend Vue components in `web-eye-tracker-front` mapped directly to backend Python endpoints in `eye-tracker-api`. CrossContext also generates an ultra-compressed AI prompt ready for external IDEs."
+  > "Here is the live contract matrix: frontend Vue components in `web-eye-tracker-front` mapped directly to backend Python endpoints in `eye-tracker-api`. CrossContext also generates an ultra-compressed AI prompt ready for external IDEs."
 
 ---
 
 ### Part 5: Autonomous Multi-Repo Agent (1:35 - 2:05)
 
 * **Spoken (Before Action)**:
-  > "Let's switch back to the Agent panel and put our autonomous agent, ContextBot, to work."
+  > "Let's switch back to the Agent panel and put ContextBot to work."
 
 * **Action**:
   > 1. Click the **Agent Task & Graph** tab.
@@ -100,7 +100,7 @@
 ### Part 7: Live Benchmarks & Closing Pitch (2:40 - 3:00)
 
 * **Spoken (Before Action)**:
-  > "Let's verify the empirical performance in our live Benchmarks suite."
+  > "Let's verify the empirical performance in the live Benchmarks suite."
 
 * **Action**:
   > Switch back to the browser and click the **Benchmarks** tab. Point to the comparative evaluation matrix.
