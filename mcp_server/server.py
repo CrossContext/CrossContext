@@ -81,14 +81,6 @@ def semantic_code_search(query: str, repo: Optional[str] = None, limit: int = 5)
     return manager.semantic_code_search(query, repo=repo, limit=limit)
 
 
-@mcp.tool()
-def build_graph_from_local_folders(repo_paths: Dict[str, str]) -> Dict[str, Any]:
-    """
-    Builds the AST dependency graph from explicit local filesystem directories on disk.
-    Args:
-        repo_paths: Map of repo name to directory path
-    """
-    return manager.index_repositories(repo_paths)
 
 
 @mcp.tool()
