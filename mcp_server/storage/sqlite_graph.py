@@ -140,9 +140,12 @@ class SQLiteGraphStore:
             conn.execute("DELETE FROM edges;")
             conn.execute("DELETE FROM nodes;")
             try:
-                conn.execute("DELETE FROM nodes_fts;")
+                conn.execute("INSERT INTO nodes_fts(nodes_fts) VALUES('delete-all');")
             except Exception:
-                pass
+                try:
+                    conn.execute("DELETE FROM nodes_fts;")
+                except Exception:
+                    pass
             conn.commit()
 
     def get_all_nodes(self) -> List[CodeNode]:
@@ -296,7 +299,7 @@ class SQLiteGraphStore:
                 results = [self._row_to_node(r) for r in cursor.fetchall()]
                 if results:
                     return results
-            except sqlite3.OperationalError:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError, Exception):
                 pass
 
             # Fallback to standard LIKE matching
