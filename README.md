@@ -164,7 +164,7 @@ flowchart TB
 ### Step 1: Clone Repository & Set Up Virtual Environment
 
 ```bash
-git clone https://github.com/abhayrajjais01/CrossContext.git
+git clone https://github.com/CrossContext/CrossContext.git
 cd CrossContext
 
 # Create and activate Python virtual environment
