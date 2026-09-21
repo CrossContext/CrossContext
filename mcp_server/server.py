@@ -82,13 +82,29 @@ def semantic_code_search(query: str, repo: Optional[str] = None, limit: int = 5)
 
 
 @mcp.tool()
-def index_local_repositories(repo_paths: Dict[str, str]) -> Dict[str, Any]:
+def build_graph_from_local_folders(repo_paths: Dict[str, str]) -> Dict[str, Any]:
     """
-    Indexes directories into the semantic graph and vector store.
+    Builds the AST dependency graph from explicit local filesystem directories on disk.
     Args:
-        repo_paths: Map of repo name to absolute/relative directory path
+        repo_paths: Map of repo name to directory path
     """
     return manager.index_repositories(repo_paths)
+
+
+@mcp.tool()
+def fetch_and_index_github_organization(
+    org_name_or_urls: str,
+    repos_filter: Optional[list] = None,
+    clear_existing: bool = False
+) -> Dict[str, Any]:
+    """
+    Fetches public GitHub repositories directly from the internet for an organization and builds the cross-repository AST knowledge graph.
+    Args:
+        org_name_or_urls: GitHub organization name (e.g. 'ruxailab') or comma-separated GitHub URLs
+        repos_filter: Optional list of repository names to filter within an organization (e.g. ['RUXAILAB', 'eye-tracker-api', 'web-eye-tracker-front'])
+        clear_existing: Whether to wipe existing graph data first (default: False)
+    """
+    return manager.ingest_github_repositories(org_name_or_urls, repos_filter=repos_filter, clear_existing=clear_existing)
 
 
 @mcp.tool()
@@ -98,7 +114,7 @@ def ingest_github_repositories(
     clear_existing: bool = False
 ) -> Dict[str, Any]:
     """
-    Dynamically fetches, clones, and indexes public GitHub repositories or an entire organization from the internet into the CrossContext knowledge graph.
+    Fetches public GitHub repositories directly from the internet for an organization and builds the cross-repository AST knowledge graph.
     Args:
         urls_or_org: GitHub organization name (e.g. 'ruxailab') or comma-separated GitHub URLs
         repos_filter: Optional list of repository names to filter within an organization (e.g. ['RUXAILAB', 'eye-tracker-api', 'web-eye-tracker-front'])
