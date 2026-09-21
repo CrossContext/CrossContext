@@ -115,6 +115,25 @@ const getApiBase = () => {
 }
 const API_BASE = getApiBase()
 
+export function getSessionId(): string {
+  if (typeof window === 'undefined') return 'default'
+  let sid = localStorage.getItem('crosscontext_session_id')
+  if (!sid) {
+    sid = 'sess_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36)
+    localStorage.setItem('crosscontext_session_id', sid)
+  }
+  return sid
+}
+
+export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers || {})
+  headers.set('x-session-id', getSessionId())
+  return fetch(url, {
+    ...init,
+    headers,
+  })
+}
+
 // ── Interactive 2D Movable & Zoomable Graph Component ────────────────────────
 
 const NODE_WIDTH = 180
@@ -1677,7 +1696,7 @@ function AgentPanel({
     setThinkingStatus(nodes.length === 0 ? 'ContextBot is thinking...' : 'ContextBot is analyzing multi-repository AST graph...')
 
     try {
-      const res = await fetch(`${API_BASE}/api/agent/run`, {
+      const res = await apiFetch(`${API_BASE}/api/agent/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2418,7 +2437,7 @@ function BenchmarksView({
         setProgress(p => (p < 85 ? p + 20 : p))
       }, 120)
 
-      const res = await fetch(`${API_BASE}/api/benchmarks`)
+      const res = await apiFetch(`${API_BASE}/api/benchmarks`)
       clearInterval(interval)
       setProgress(100)
 
@@ -2983,7 +3002,7 @@ function OrgBlueprintView({
         ? `${API_BASE}/api/org/blueprint?repos=${encodeURIComponent(reposToFilter.join(','))}`
         : `${API_BASE}/api/org/blueprint`
 
-      const res = await fetch(url)
+      const res = await apiFetch(url)
       const d = await res.json()
       setData(d)
 
@@ -3542,7 +3561,7 @@ function CodeExplorerView({
   // Fetch all graph nodes to derive unique files for selected repo
   useEffect(() => {
     if (!selectedRepo) return
-    fetch(`${API_BASE}/api/graph`)
+    apiFetch(`${API_BASE}/api/graph`)
       .then(r => r.json())
       .then(g => {
         const matchingFiles = Array.from(new Set(
@@ -3565,7 +3584,7 @@ function CodeExplorerView({
   useEffect(() => {
     if (!selectedRepo || !selectedFile) return
     setLoadingFile(true)
-    fetch(`${API_BASE}/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
+    apiFetch(`${API_BASE}/api/file/content?repo=${encodeURIComponent(selectedRepo)}&file_path=${encodeURIComponent(selectedFile)}`)
       .then(r => r.json())
       .then(res => {
         setFileContent(res.content || '(File content empty or unavailable on disk)')
@@ -3809,7 +3828,7 @@ function IngestModal({
     setSelectedOrgRepos([])
 
     try {
-      const discRes = await fetch(`${API_BASE}/api/repos/discover-org`, {
+      const discRes = await apiFetch(`${API_BASE}/api/repos/discover-org`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ org: targetOrg }),
@@ -3873,7 +3892,7 @@ function IngestModal({
     setLoading(true)
     try {
       setStatusMsg(`Starting ingestion of ${targetUrls.length} repositories...`)
-      const res = await fetch(`${API_BASE}/api/repos/ingest`, {
+      const res = await apiFetch(`${API_BASE}/api/repos/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls: targetUrls, clear_existing: wipeExisting, include_all: includeAll }),
@@ -3889,7 +3908,7 @@ function IngestModal({
       // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`${API_BASE}/api/repos/ingest/status?t=${Date.now()}`)
+          const statusRes = await apiFetch(`${API_BASE}/api/repos/ingest/status?t=${Date.now()}`)
           const statusData = await statusRes.json()
           setStatusMsg(statusData.progress || 'Processing...')
 
@@ -4692,13 +4711,13 @@ export default function App() {
   // Fetch initial graph & stats on load
   const loadData = useCallback(async () => {
     try {
-      const statsRes = await fetch(`${API_BASE}/api/stats`)
+      const statsRes = await apiFetch(`${API_BASE}/api/stats`)
       if (statsRes.ok) {
         const s = await statsRes.json()
         setStats(s)
       }
 
-      const graphRes = await fetch(`${API_BASE}/api/graph`)
+      const graphRes = await apiFetch(`${API_BASE}/api/graph`)
       if (graphRes.ok) {
         const g = await graphRes.json()
         setGraphNodes(g.nodes || [])
@@ -4715,7 +4734,7 @@ export default function App() {
   }, [loadData])
 
   const handleReindex = async () => {
-    const res = await fetch(`${API_BASE}/api/repos/reindex`, { method: 'POST' })
+    const res = await apiFetch(`${API_BASE}/api/repos/reindex`, { method: 'POST' })
     if (res.ok) {
       await loadData()
     }
@@ -4723,7 +4742,7 @@ export default function App() {
 
   const handleClearGraph = async () => {
     try {
-      await fetch(`${API_BASE}/api/repos/clear`, { method: 'POST' })
+      await apiFetch(`${API_BASE}/api/repos/clear`, { method: 'POST' })
     } catch {
       // Offline fallback
     }
@@ -4742,7 +4761,7 @@ export default function App() {
   }
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('crosscontext_theme') as 'light' | 'dark') || 'dark'
+    return (localStorage.getItem('crosscontext_theme') as 'light' | 'dark') || 'light'
   })
 
   useEffect(() => {

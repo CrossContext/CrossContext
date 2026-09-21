@@ -11,11 +11,12 @@ Run with:
 import os
 import sys
 import time
+import re
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -48,25 +49,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Agent, Graph Store, Bedrock Client & Diff Generator
-agent = CrossContextAgent(db_path=os.getenv("SQLITE_DB_PATH", "data/omnicontext_graph.db"))
-store = agent.tool_manager.graph_store
+# Multi-tenant session caching directory
+SESSIONS_DIR = PROJECT_ROOT / "data" / "sessions"
+SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+_agents_cache: Dict[str, CrossContextAgent] = {}
+_diff_generators_cache: Dict[str, CrossRepoDiffGenerator] = {}
+_ingest_states: Dict[str, Dict[str, Any]] = {}
 ingester = GitHubRepoIngester()
-diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
 bedrock_client = BedrockClient()
 
-# Retain clean database for new users - do not auto-seed demo testbed data
-def _bootstrap():
-    pass
 
-_bootstrap()
+def _sanitize_session_id(session_id: Optional[str]) -> str:
+    """Sanitizes user session ID for safe file path and dictionary lookup."""
+    if not session_id:
+        return "default"
+    sid = session_id.strip()
+    clean = re.sub(r'[^a-zA-Z0-9_\-]', '', sid)
+    return clean if clean else "default"
 
 
-@app.post("/api/repos/clear")
-def clear_all_repositories():
-    """Wipes all indexed repositories, AST nodes, and edges to reset to clean new-user state."""
-    store.clear()
-    return {"status": "success", "message": "Knowledge graph successfully wiped."}
+def get_session_agent(session_id: Optional[str] = None) -> CrossContextAgent:
+    """Returns or instantiates an isolated CrossContextAgent with its own SQLite database for this session."""
+    sid = _sanitize_session_id(session_id)
+    if sid not in _agents_cache:
+        if sid == "default":
+            db_path = str(PROJECT_ROOT / "data" / "crosscontext_graph.db")
+        else:
+            db_path = str(SESSIONS_DIR / f"{sid}.db")
+        _agents_cache[sid] = CrossContextAgent(db_path=db_path)
+    return _agents_cache[sid]
+
+
+def get_session_diff_generator(session_id: Optional[str] = None) -> CrossRepoDiffGenerator:
+    """Returns or instantiates an isolated CrossRepoDiffGenerator for this session."""
+    sid = _sanitize_session_id(session_id)
+    if sid not in _diff_generators_cache:
+        agent_inst = get_session_agent(sid)
+        _diff_generators_cache[sid] = CrossRepoDiffGenerator(agent_inst.tool_manager)
+    return _diff_generators_cache[sid]
+
+
+def get_session_ingest_state(session_id: Optional[str] = None) -> Dict[str, Any]:
+    """Returns isolated background ingestion state dictionary for this session."""
+    sid = _sanitize_session_id(session_id)
+    if sid not in _ingest_states:
+        _ingest_states[sid] = {
+            "running": False,
+            "progress": "",
+            "result": None,
+            "error": None,
+        }
+    return _ingest_states[sid]
 
 
 # --- Pydantic Request Models ---
@@ -94,9 +128,31 @@ def get_aws_status():
     return bedrock_client.check_connection()
 
 
+@app.post("/api/repos/clear")
+def clear_all_repositories(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Wipes all indexed repositories, AST nodes, and edges for the active user session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
+    agent_inst.tool_manager.graph_store.clear()
+    state = get_session_ingest_state(sid)
+    state["result"] = None
+    state["error"] = None
+    state["progress"] = ""
+    return {"status": "success", "message": "Knowledge graph successfully wiped for your workspace session."}
+
+
 @app.get("/api/stats")
-def get_stats():
-    """Returns database and vector engine statistics."""
+def get_stats(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Returns database and vector engine statistics for the active user session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
+    store = agent_inst.tool_manager.graph_store
     stats = store.get_stats()
     all_edges = store.get_all_edges()
     cross_repo_count = len([e for e in all_edges if e.edge_type == EdgeType.CONSUMES_API])
@@ -113,8 +169,14 @@ def get_stats():
 
 
 @app.get("/api/graph")
-def get_graph():
-    """Returns all nodes and edges formatted for graph rendering."""
+def get_graph(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Returns all nodes and edges formatted for graph rendering for the active user session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
+    store = agent_inst.tool_manager.graph_store
     all_nodes = store.get_all_nodes()
     all_edges = store.get_all_edges()
 
@@ -210,14 +272,19 @@ def get_graph():
 
 
 @app.post("/api/repos/reindex")
-def reindex_testbed():
-    """Forces clean re-indexing of testbed repositories."""
+def reindex_testbed(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Forces clean re-indexing of testbed repositories for the active user session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
     testbeds = {
         "repo_auth_core": str(PROJECT_ROOT / "testbed" / "repo_auth_core"),
         "repo_frontend_portal": str(PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
         "repo_shared_sdk": str(PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
     }
-    res = agent.tool_manager.index_repositories(testbeds, clear_existing=True)
+    res = agent_inst.tool_manager.index_repositories(testbeds, clear_existing=True)
     return {
         "status": "success",
         "message": "Repositories re-indexed successfully",
@@ -228,17 +295,24 @@ def reindex_testbed():
 
 
 @app.post("/api/agent/run")
-async def run_agent(req: AgentRunRequest):
-    """Executes the autonomous agent reasoning loop over the multi-repo code graph."""
+async def run_agent(
+    req: AgentRunRequest,
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Executes the autonomous agent reasoning loop over the multi-repo code graph for this session."""
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
 
     telemetry_logs = []
     def callback(event_type, msg):
         telemetry_logs.append({"type": event_type, "message": msg, "time": time.time()})
 
     start_time = time.perf_counter()
-    result = await agent.run(req.query, telemetry_callback=callback)
+    result = await agent_inst.run(req.query, telemetry_callback=callback)
     elapsed_ms = (time.perf_counter() - start_time) * 1000
 
     return {
@@ -254,107 +328,113 @@ async def run_agent(req: AgentRunRequest):
 
 
 @app.post("/api/agent/diffs")
-def generate_cross_repo_diffs(req: AgentRunRequest):
-    """Generates unified synchronized git diffs and PR specifications across repositories."""
+def generate_cross_repo_diffs(
+    req: AgentRunRequest,
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Generates unified synchronized git diffs and PR specifications across repositories for this session."""
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-    res = diff_generator.synthesize_cross_repo_patches(req.query)
+    sid = _sanitize_session_id(x_session_id or session_id)
+    diff_gen = get_session_diff_generator(sid)
+    res = diff_gen.synthesize_cross_repo_patches(req.query)
     return res
 
 
-# --- Background ingestion task state ---
-_ingest_state: Dict[str, Any] = {
-    "running": False,
-    "progress": "",
-    "result": None,
-    "error": None,
-}
-
-
-def _run_ingest_sync(urls: List[str], clear_existing: bool, include_all: bool = True):
-    """Runs clone + index in a background thread. Updates _ingest_state as it progresses."""
-    global _ingest_state
-    _ingest_state["running"] = True
-    _ingest_state["progress"] = f"Starting ingestion of {len(urls)} repositories..."
-    _ingest_state["result"] = None
-    _ingest_state["error"] = None
+# --- Background ingestion helper ---
+def _run_ingest_sync(urls: List[str], clear_existing: bool, include_all: bool, sid: str):
+    """Runs clone + index in a background thread for the specific session."""
+    state = get_session_ingest_state(sid)
+    agent_inst = get_session_agent(sid)
+    state["running"] = True
+    state["progress"] = f"Starting ingestion of {len(urls)} repositories..."
+    state["result"] = None
+    state["error"] = None
     try:
         def progress_cb(stage: str, msg: str, pct: float):
-            _ingest_state["progress"] = msg
+            state["progress"] = msg
 
         res = ingester.ingest_repositories(
             urls,
-            agent.tool_manager,
+            agent_inst.tool_manager,
             clear_existing=clear_existing,
             include_all=include_all,
             progress_cb=progress_cb,
         )
-        _ingest_state["result"] = res
-        _ingest_state["progress"] = "Ingestion complete."
+        state["result"] = res
+        state["progress"] = "Ingestion complete."
     except Exception as e:
-        _ingest_state["error"] = str(e)
-        _ingest_state["progress"] = f"Ingestion failed: {e}"
+        state["error"] = str(e)
+        state["progress"] = f"Ingestion failed: {e}"
     finally:
-        _ingest_state["running"] = False
+        state["running"] = False
 
 
 @app.post("/api/repos/ingest")
-async def ingest_repositories(req: IngestRequest):
-    """Clones and indexes dynamic GitHub repositories in a background thread.
+async def ingest_repositories(
+    req: IngestRequest,
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Clones and indexes dynamic GitHub repositories in a background thread for this session.
     Returns immediately so the UI stays responsive. Poll /api/repos/ingest/status for progress.
     """
+    sid = _sanitize_session_id(x_session_id or session_id)
     if not req.urls:
         raise HTTPException(status_code=400, detail="At least one repository URL is required")
 
-    if _ingest_state["running"]:
+    state = get_session_ingest_state(sid)
+    if state["running"]:
         return {
             "status": "already_running",
-            "message": "An ingestion job is already in progress.",
-            "progress": _ingest_state["progress"],
+            "message": "An ingestion job is already in progress for your workspace session.",
+            "progress": state["progress"],
         }
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing, req.include_all)
+    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing, req.include_all, sid)
 
     return {
         "status": "started",
         "message": f"Ingestion of {len(req.urls)} repositories started in background. Poll /api/repos/ingest/status for progress.",
-        "progress": _ingest_state["progress"],
+        "progress": state["progress"],
     }
 
 
 @app.get("/api/repos/ingest/status")
-def ingest_status():
-    """Returns the current status of the background ingestion job."""
+def ingest_status(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Returns the current status of the background ingestion job for this session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    state = get_session_ingest_state(sid)
     headers = {"Cache-Control": "no-cache, no-store, must-revalidate"}
-    if _ingest_state["result"]:
-        res_data = dict(_ingest_state["result"])
+    if state["result"]:
+        res_data = dict(state["result"])
         res_data.pop("nodes", None)
         res_data.pop("edges", None)
         return JSONResponse(content={
-            "running": _ingest_state["running"],
-            "progress": _ingest_state["progress"],
+            "running": state["running"],
+            "progress": state["progress"],
             "complete": True,
             **res_data,
         }, headers=headers)
-    if _ingest_state["error"]:
+    if state["error"]:
         return JSONResponse(content={
             "running": False,
-            "progress": _ingest_state["progress"],
+            "progress": state["progress"],
             "complete": True,
             "status": "error",
-            "error": str(_ingest_state["error"]),
+            "error": str(state["error"]),
         }, headers=headers)
     return JSONResponse(content={
-        "running": _ingest_state["running"],
-        "progress": _ingest_state["progress"],
-        "complete": not _ingest_state["running"] and _ingest_state["result"] is None and _ingest_state["error"] is None,
+        "running": state["running"],
+        "progress": state["progress"],
+        "complete": not state["running"] and state["result"] is None and state["error"] is None,
     }, headers=headers)
-
-
-class DiscoverOrgRequest(BaseModel):
-    org: str
 
 
 @app.post("/api/repos/discover-org")
@@ -371,10 +451,16 @@ def discover_org_repositories(req: DiscoverOrgRequest):
 
 
 @app.get("/api/org/blueprint")
-def get_org_blueprint(repos: Optional[str] = None):
-    """Generates visual architecture metrics and raw AI-optimized context for IDEs.
-    Accepts optional comma-separated list of repository names to isolate correlation and contracts.
-    """
+def get_org_blueprint(
+    repos: Optional[str] = None,
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Generates visual architecture metrics and raw AI-optimized context for IDEs for this session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
+    store = agent_inst.tool_manager.graph_store
+
     filter_repos = [r.strip() for r in repos.split(",") if r.strip()] if repos else None
     generator = OrgContextGenerator(store)
     analysis = generator.analyze_organization(filter_repos=filter_repos)
@@ -421,8 +507,15 @@ def get_file_content(repo: str, file_path: str):
 
 
 @app.get("/api/benchmarks")
-def get_benchmarks():
-    """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics."""
+def get_benchmarks(
+    x_session_id: Optional[str] = Header(None, alias="x-session-id"),
+    session_id: Optional[str] = Query(None)
+):
+    """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics for this session."""
+    sid = _sanitize_session_id(x_session_id or session_id)
+    agent_inst = get_session_agent(sid)
+    store = agent_inst.tool_manager.graph_store
+
     all_nodes = store.get_all_nodes()
     if not all_nodes:
         return {
@@ -491,3 +584,4 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     print(f"Starting CrossContext API & Web Server on http://localhost:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
+
