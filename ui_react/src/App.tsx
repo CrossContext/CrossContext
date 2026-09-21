@@ -332,6 +332,25 @@ function CrossRepoGraph({
     return s
   }, [selectedNode, edges])
 
+  const blastRadiusSummary = useMemo(() => {
+    if (!selectedNode || directCallers.size === 0) return null
+    const selNodeObj = nodes.find(n => n.id === selectedNode)
+    const callerNodes = Array.from(directCallers)
+      .map(id => nodes.find(n => n.id === id))
+      .filter(Boolean) as GraphNode[]
+
+    const crossRepoCallers = callerNodes.filter(n => selNodeObj && n.repo !== selNodeObj.repo)
+    const externalRepos = Array.from(new Set(crossRepoCallers.map(n => n.repo)))
+
+    if (crossRepoCallers.length > 0) {
+      if (externalRepos.length === 1) {
+        return `${crossRepoCallers.length} cross-repo caller${crossRepoCallers.length === 1 ? '' : 's'} in '${externalRepos[0]}' will break on contract change`
+      }
+      return `${crossRepoCallers.length} cross-repo callers across ${externalRepos.length} repositories (${externalRepos.join(', ')}) will break on contract change`
+    }
+    return `${callerNodes.length} internal caller${callerNodes.length === 1 ? '' : 's'} in '${selNodeObj?.repo || 'this repo'}' directly affected by signature change`
+  }, [selectedNode, directCallers, nodes])
+
   // Priority calculations for symbols (Functions, Classes, APIs)
   const priorityMatrix = useMemo(() => {
     const counts: Record<string, { inbound: number; outbound: number; crossRepo: boolean }> = {}
@@ -951,7 +970,7 @@ function CrossRepoGraph({
           )}
 
           {/* Blast Radius Heatmap Banner */}
-          {selectedNode && directCallers.size > 0 && (
+          {selectedNode && blastRadiusSummary && (
             <div style={{
               position: 'absolute', top: 12, left: 12, zIndex: 25,
               background: 'rgba(220, 38, 38, 0.95)', color: 'white',
@@ -961,7 +980,7 @@ function CrossRepoGraph({
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span>BLAST RADIUS:</span>
-              <span>{directCallers.size} {directCallers.size === 1 ? 'dependent consumer' : 'dependent consumers'} affected across repositories</span>
+              <span>{blastRadiusSummary}</span>
             </div>
           )}
 
