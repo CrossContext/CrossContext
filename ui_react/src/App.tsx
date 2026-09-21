@@ -961,7 +961,7 @@ function CrossRepoGraph({
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span>BLAST RADIUS:</span>
-              <span>{directCallers.size} upstream consumers affected across repositories</span>
+              <span>{directCallers.size} {directCallers.size === 1 ? 'dependent consumer' : 'dependent consumers'} affected across repositories</span>
             </div>
           )}
 
