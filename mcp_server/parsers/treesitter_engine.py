@@ -65,23 +65,71 @@ class TreeSitterEngine:
             return self._parse_cpp(repo, norm_path, content)
         elif ext in ("clj", "cljs", "cljc", "edn"):
             return self._parse_clojure(repo, norm_path, content)
+        elif ext == "vue":
+            return self._parse_vue(repo, norm_path, content)
+        elif ext == "ipynb":
+            return self._parse_jupyter(repo, norm_path, content)
         else:
             return self._parse_generic(repo, norm_path, content)
+
+    def _parse_vue(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Extracts script blocks from Vue Single File Components (.vue) and parses them."""
+        import re
+        script_matches = list(re.finditer(r'<script[^>]*>(.*?)</script>', content, re.DOTALL | re.IGNORECASE))
+        all_nodes: List[CodeNode] = []
+        all_edges: List[CodeEdge] = []
+        for match in script_matches:
+            script_content = match.group(1)
+            start_pos = match.start(1)
+            line_offset = content[:start_pos].count('\n')
+            nodes, edges = self._parse_typescript_javascript(repo, file_path, script_content)
+            for n in nodes:
+                n.start_line += line_offset
+                n.end_line += line_offset
+                n.id = CodeNode.generate_id(repo, file_path, n.symbol_name, n.start_line)
+            all_nodes.extend(nodes)
+            all_edges.extend(edges)
+        if not all_nodes:
+            return self._parse_generic(repo, file_path, content)
+        return all_nodes, all_edges
+
+    def _parse_jupyter(self, repo: str, file_path: str, content: str) -> Tuple[List[CodeNode], List[CodeEdge]]:
+        """Parses Python code cells from Jupyter Notebooks (.ipynb)."""
+        import json
+        try:
+            nb = json.loads(content)
+            code_lines = []
+            for cell in nb.get("cells", []):
+                if cell.get("cell_type") == "code":
+                    src = cell.get("source", [])
+                    if isinstance(src, list):
+                        code_lines.extend(src)
+                        code_lines.append("\n")
+                    elif isinstance(src, str):
+                        code_lines.append(src)
+                        code_lines.append("\n")
+            py_code = "".join(code_lines)
+            if py_code.strip():
+                return self._parse_python(repo, file_path, py_code)
+        except Exception:
+            pass
+        return self._parse_generic(repo, file_path, content)
 
     def parse_directory(
         self,
         repo: str,
         root_dir: str,
+        include_all: bool = True,
         progress_cb: Optional[Any] = None
     ) -> Tuple[List[CodeNode], List[CodeEdge]]:
-        """Recursively parses all source files in a repository directory."""
+        """Recursively parses source files in a repository directory."""
         all_nodes: List[CodeNode] = []
         all_edges: List[CodeEdge] = []
         root_path = Path(root_dir)
 
         valid_extensions = {
             ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-            ".go", ".java", ".php", ".rs", ".cs", ".csx", ".rb",
+            ".vue", ".ipynb", ".go", ".java", ".php", ".rs", ".cs", ".csx", ".rb",
             ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
             ".clj", ".cljs", ".cljc", ".edn",
             ".kt", ".kts", ".swift", ".scala", ".dart",
@@ -89,22 +137,27 @@ class TreeSitterEngine:
             ".pl", ".pm", ".ex", ".exs", ".erl", ".hs",
             ".jl", ".zig"
         }
+        # Absolute minimum ignored patterns (raw binary git DB and package caches)
         ignored_patterns = {
-            ".venv", "venv", "node_modules", "vendor", "__pycache__",
+            ".venv", "venv", "node_modules", "__pycache__",
             ".git", "dist", "build", "target", "bin", "obj", ".gradle",
-            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo",
-            "third_party", "deps", "docs", "documentation", "website", "site",
-            "tests", "test", "fixtures", "mocks", "examples", "benchmark", "benchmarks"
+            ".idea", ".vscode", "coverage", ".next", ".nuxt", ".turbo"
         }
+        if not include_all:
+            ignored_patterns.update({
+                "third_party", "deps", "docs", "documentation", "website", "site",
+                "tests", "test", "fixtures", "mocks", "examples", "benchmark", "benchmarks"
+            })
 
         candidates = []
         for root, dirs, files in os.walk(root_dir):
-            # Prune directories in-place so os.walk NEVER descends into them
+            # Prune directories in-place so os.walk NEVER descends into package/binary folders
             dirs[:] = [
                 d for d in dirs
                 if d.lower() not in ignored_patterns
                 and not d.startswith(".")
-                and not any(p in d.lower() for p in ("node_modules", "vendor", "test", "docs"))
+                and (include_all or not any(p in d.lower() for p in ("node_modules", "vendor", "test", "docs")))
+                and not any(p in d.lower() for p in ("node_modules", ".venv", "__pycache__"))
             ]
             for f in files:
                 ext = Path(f).suffix.lower()

@@ -39,8 +39,69 @@ COMMON_THIRD_PARTY_PACKAGES: Set[str] = {
 }
 
 
+class RouteTrieNode:
+    """Trie node for O(K) radix route matching with parameterized segments."""
+    def __init__(self):
+        self.children: Dict[str, 'RouteTrieNode'] = {}
+        self.wildcard_child: Optional['RouteTrieNode'] = None
+        self.endpoints: List[Tuple[str, CodeNode]] = []  # (http_method, node)
+
+
+class RouteTrie:
+    """Radix prefix tree for sub-microsecond parameterized API route matching."""
+    def __init__(self):
+        self.root = RouteTrieNode()
+
+    def insert(self, method: str, route: str, node: CodeNode) -> None:
+        segments = [s.strip() for s in route.strip("/").split("/") if s.strip()]
+        curr = self.root
+        for seg in segments:
+            # Match parameters like {id}, :id, <id>, or *
+            if seg.startswith(":") or (seg.startswith("{") and seg.endswith("}")) or (seg.startswith("<") and seg.endswith(">")) or seg == "*":
+                if not curr.wildcard_child:
+                    curr.wildcard_child = RouteTrieNode()
+                curr = curr.wildcard_child
+            else:
+                seg_clean = seg.lower()
+                if seg_clean not in curr.children:
+                    curr.children[seg_clean] = RouteTrieNode()
+                curr = curr.children[seg_clean]
+        curr.endpoints.append((method.upper(), node))
+
+    def match(self, method: str, route: str, exclude_repo: Optional[str] = None) -> Optional[CodeNode]:
+        segments = [s.strip() for s in route.strip("/").split("/") if s.strip()]
+        norm_method = method.upper()
+
+        def _search(curr: RouteTrieNode, idx: int) -> Optional[CodeNode]:
+            if idx == len(segments):
+                # 1. Match exact HTTP method first
+                for ep_method, ep_node in curr.endpoints:
+                    if (not exclude_repo or ep_node.repo != exclude_repo) and ep_method == norm_method:
+                        return ep_node
+                # 2. Fallback to any method
+                for ep_method, ep_node in curr.endpoints:
+                    if not exclude_repo or ep_node.repo != exclude_repo:
+                        return ep_node
+                return None
+
+            seg = segments[idx].lower()
+            # Check exact segment match first
+            if seg in curr.children:
+                res = _search(curr.children[seg], idx + 1)
+                if res:
+                    return res
+            # Check wildcard match
+            if curr.wildcard_child:
+                res = _search(curr.wildcard_child, idx + 1)
+                if res:
+                    return res
+            return None
+
+        return _search(self.root, 0)
+
+
 class CrossRepoLinker:
-    """Connects symbols across multiple repositories to construct deterministic cross-repo edges."""
+    """Connects symbols across multiple repositories using O(1) hash maps and O(K) route tries."""
 
     def __init__(self):
         pass
@@ -55,10 +116,8 @@ class CrossRepoLinker:
             repo_names.append(clean_no_prefix)
 
         for r_name in repo_names:
-            # Word or path boundary matching: e.g. from repo_shared_sdk import ... or from '@org/shared_sdk'
             pattern = rf'(?:^|[\s\'"`/@./])({re.escape(r_name)})(?:[\s\'"`/@./]|$)'
             if re.search(pattern, clean_imp, re.IGNORECASE):
-                # Ensure the statement is not actually just importing a 3rd-party library
                 parts = [p.lower() for p in re.split(r'[\s./\'"`]', clean_imp) if p]
                 if len(parts) > 1 and parts[0] in ("from", "import", "use", "using", "require", "include", "open"):
                     root_mod = parts[1]
@@ -68,74 +127,52 @@ class CrossRepoLinker:
         return False
 
     def link_repositories(self, nodes: List[CodeNode]) -> List[CodeEdge]:
-        """Analyzes nodes across all indexed repositories and discovers cross-repository edges."""
+        """Analyzes nodes across all indexed repositories and discovers cross-repository edges in O(N)."""
         cross_edges: List[CodeEdge] = []
         seen_edges: Set[Tuple[str, str, str]] = set()
 
-        # 1. Map all API endpoints
+        # 1. Inverted Hash Indexes & Route Trie
         endpoint_method_map: Dict[Tuple[str, str], CodeNode] = {}
         route_fallback_map: Dict[str, List[CodeNode]] = {}
-        all_endpoints: List[CodeNode] = []
+        route_trie = RouteTrie()
         nodes_by_name: Dict[str, List[CodeNode]] = {}
-        nodes_by_repo: Dict[str, List[CodeNode]] = {}
+        repo_symbol_map: Dict[str, Dict[str, CodeNode]] = {}
 
         for node in nodes:
             nodes_by_name.setdefault(node.symbol_name, []).append(node)
-            nodes_by_repo.setdefault(node.repo, []).append(node)
+            repo_symbol_map.setdefault(node.repo, {})[node.symbol_name] = node
 
             if node.symbol_type == SymbolType.ENDPOINT:
-                all_endpoints.append(node)
                 route = node.metadata.get("endpoint_route", "")
                 method = (node.metadata.get("http_method") or "GET").upper()
                 if route:
                     norm_route = self._normalize_route(route)
                     endpoint_method_map[(method, norm_route)] = node
                     route_fallback_map.setdefault(norm_route, []).append(node)
+                    route_trie.insert(method, norm_route, node)
 
-        # 2. Match consumers to endpoints with method-aware & parameterized routing
+        # 2. Match consumers to endpoints with O(1) hash and O(K) Trie routing
         for node in nodes:
             consumed_endpoint = node.metadata.get("consumes_endpoint", "")
             consumed_method = (node.metadata.get("consumes_http_method") or "GET").upper()
 
             if consumed_endpoint:
                 norm_consumed = self._normalize_route(consumed_endpoint)
-
-                # Guard: Root path or bare slash ('/' or "") requires an explicit target service base URL matching the target repo
                 is_root_route = norm_consumed in ("", "/")
                 target_base_url = (node.metadata or {}).get("target_base_url", "").lower()
                 if is_root_route and not target_base_url:
                     continue
 
-                target_endpoint = None
-
-                # 2a. First try exact method + route match
+                # 2a. O(1) Exact method + route match
                 target_endpoint = endpoint_method_map.get((consumed_method, norm_consumed))
 
-                # 2b. Try exact route match from different repo (method fallback)
+                # 2b. O(1) Exact route match fallback
                 if not target_endpoint and norm_consumed in route_fallback_map:
                     target_endpoint = next((ep for ep in route_fallback_map[norm_consumed] if ep.repo != node.repo), None)
 
-                # 2c. Try parameterized / wildcard route matching across all external endpoints (only for non-root routes)
+                # 2c. O(K) Parameterized Route Trie match (instant trie traversal)
                 if not target_endpoint and not is_root_route:
-                    # Prefer matching HTTP method first
-                    for ep in all_endpoints:
-                        if ep.repo == node.repo:
-                            continue
-                        ep_route = ep.metadata.get("endpoint_route", "")
-                        ep_method = (ep.metadata.get("http_method") or "GET").upper()
-                        if ep_method == consumed_method and self._route_matches(ep_route, consumed_endpoint):
-                            target_endpoint = ep
-                            break
-
-                    # If still not found, check any method
-                    if not target_endpoint:
-                        for ep in all_endpoints:
-                            if ep.repo == node.repo:
-                                continue
-                            ep_route = ep.metadata.get("endpoint_route", "")
-                            if self._route_matches(ep_route, consumed_endpoint):
-                                target_endpoint = ep
-                                break
+                    target_endpoint = route_trie.match(consumed_method, norm_consumed, exclude_repo=node.repo)
 
                 # Root route verification: target base URL must match producer repo
                 if target_endpoint and is_root_route:
@@ -161,44 +198,40 @@ class CrossRepoLinker:
                             }
                         ))
 
-            # 3. Cross-repo SDK / function calls & Import bindings
+            # 3. Cross-repo SDK / function calls & Import bindings (O(1) Inverted Hash Lookups)
             file_imports = node.metadata.get("file_imports", [])
 
             # 3a. Check explicit cross-repo imports (e.g. from repo_shared_sdk import client)
             for imp in file_imports:
-                for target_repo, target_nodes in nodes_by_repo.items():
+                for target_repo, sym_dict in repo_symbol_map.items():
                     if target_repo == node.repo:
                         continue
 
                     if not self._is_repo_imported(target_repo, imp):
                         continue
 
-                    for t_node in target_nodes:
-                        if t_node.symbol_name.lower() in GENERIC_AND_BUILTIN_SYMBOLS:
-                            continue
-                        if len(t_node.symbol_name) < 4:
-                            continue
+                    imp_tokens = set(re.findall(r'\b[a-zA-Z0-9_]{4,}\b', imp))
+                    matched_symbols = imp_tokens.intersection(sym_dict.keys())
 
-                        # Verify symbol is specifically imported or called in code
-                        is_symbol_in_import = bool(re.search(r'\b' + re.escape(t_node.symbol_name) + r'\b', imp))
-                        is_symbol_in_code = bool(node.code_content and re.search(r'\b' + re.escape(t_node.symbol_name) + r'\b', node.code_content))
-
-                        if is_symbol_in_import or is_symbol_in_code:
-                            edge_key = (node.id, t_node.id, EdgeType.IMPORTS.value)
-                            if edge_key not in seen_edges:
-                                seen_edges.add(edge_key)
-                                cross_edges.append(CodeEdge(
-                                    caller_id=node.id,
-                                    callee_id=t_node.id,
-                                    edge_type=EdgeType.IMPORTS,
-                                    confidence=0.98,
-                                    metadata={
-                                        "import": imp,
-                                        "symbol": t_node.symbol_name,
-                                        "caller_repo": node.repo,
-                                        "target_repo": target_repo
-                                    }
-                                ))
+                    for sym_name in matched_symbols:
+                        if sym_name.lower() in GENERIC_AND_BUILTIN_SYMBOLS:
+                            continue
+                        t_node = sym_dict[sym_name]
+                        edge_key = (node.id, t_node.id, EdgeType.IMPORTS.value)
+                        if edge_key not in seen_edges:
+                            seen_edges.add(edge_key)
+                            cross_edges.append(CodeEdge(
+                                caller_id=node.id,
+                                callee_id=t_node.id,
+                                edge_type=EdgeType.IMPORTS,
+                                confidence=0.98,
+                                metadata={
+                                    "import": imp,
+                                    "symbol": t_node.symbol_name,
+                                    "caller_repo": node.repo,
+                                    "target_repo": target_repo
+                                }
+                            ))
 
             # 3b. Check invocations of external functions/methods (SDK client prefix or imported symbols)
             if node.code_content:

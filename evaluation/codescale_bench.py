@@ -1,7 +1,7 @@
 """
 CrossContext - CodeScaleBench Cross-Repo Dependency Tracing Benchmark (Modular)
 Evaluates the engine's ability to trace all downstream consumers of an API endpoint
-across repository boundaries — the core competency that naive RAG cannot achieve.
+across repository boundaries - the core competency that naive RAG cannot achieve.
 """
 
 import sys
@@ -41,6 +41,16 @@ def run_codescale_benchmark(
         except Exception:
             all_nodes = []
             all_edges = []
+
+    if store is not None and not all_nodes:
+        return BenchmarkResult(
+            benchmark_name="CodeScaleBench Cross-Repo Tracing",
+            passed=False,
+            score=0.0,
+            metrics={"empty": True, "boundary_precision_pct": 0.0, "symbols_indexed": 0},
+            details=["No repositories currently indexed. Ingest repositories to run CodeScaleBench evaluation."],
+            execution_time_ms=0.0,
+        )
 
     if not all_nodes:
         if testbed_root is None:

@@ -73,6 +73,9 @@ class GitHubRepoIngester:
         if not clean_org:
             return []
 
+        if clean_org.lower() == "vlc":
+            clean_org = "videolan"
+
         # Return cached discovery result if available
         cache_key = clean_org.lower()
         if cache_key in cls._ORG_CACHE and cls._ORG_CACHE[cache_key]:
@@ -226,26 +229,25 @@ class GitHubRepoIngester:
             # If not a valid git dir or pull failed, remove and re-clone
             shutil.rmtree(dest_path, ignore_errors=True)
 
-        # Perform shallow clone with network buffer optimization and retry logic
+        # Single-branch shallow clone with buffer optimization and fast failover
         git_config = [
             "-c", "http.postBuffer=524288000",
             "-c", "http.lowSpeedLimit=1000",
-            "-c", "http.lowSpeedTime=30",
+            "-c", "http.lowSpeedTime=20",
         ]
-        cmd = ["git"] + git_config + ["clone", "--depth", "1", "--filter=blob:none", url_or_path, str(dest_path)]
+        cmd = ["git"] + git_config + ["clone", "--depth", "1", "--single-branch", "--no-tags", url_or_path, str(dest_path)]
 
         last_error = ""
         for attempt in range(1, 3):
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=35)
                 if res.returncode == 0 and (dest_path / ".git").exists():
                     break
                 last_error = res.stderr or "Git clone returned non-zero exit code."
-                # Clean up failed partial clone before retrying
                 if dest_path.exists():
                     shutil.rmtree(dest_path, ignore_errors=True)
-                # Fallback to standard depth 1 clone without filter if blob filter not supported
-                cmd = ["git"] + git_config + ["clone", "--depth", "1", url_or_path, str(dest_path)]
+                # Fallback to standard depth 1 clone
+                cmd = ["git"] + git_config + ["clone", "--depth", "1", "--single-branch", url_or_path, str(dest_path)]
             except Exception as e:
                 last_error = str(e)
                 if dest_path.exists():
@@ -275,30 +277,61 @@ class GitHubRepoIngester:
         urls_or_paths: List[str],
         tool_manager: CodeGraphToolManager,
         clear_existing: bool = True,
+        include_all: bool = True,
         progress_cb: Optional[Callable[[str, str, float], None]] = None
     ) -> Dict[str, Any]:
         """
-        Clones multiple repositories, extracts AST structural symbols,
+        Clones multiple repositories in parallel, extracts AST structural symbols,
         links cross-repository dependencies, and registers all nodes into the knowledge graph.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         repo_paths: Dict[str, str] = {}
         clone_results = []
         errors = []
 
-        total_repos = len(urls_or_paths)
-        for idx, item in enumerate(urls_or_paths):
-            if not item.strip():
-                continue
-            progress = (idx / max(total_repos, 1)) * 0.5
-            if progress_cb:
-                progress_cb("start", f"Processing repository {idx+1}/{total_repos}: {item}", progress)
+        valid_urls = [u.strip() for u in urls_or_paths if u.strip()]
+        total_repos = len(valid_urls)
+        if not total_repos:
+            return {
+                "status": "error",
+                "message": "No repositories provided.",
+                "errors": ["Empty repository list"],
+                "indexed_nodes": 0,
+                "cross_repo_edges": 0,
+                "nodes": [],
+                "edges": []
+            }
 
-            res = self.clone_repository(item.strip(), progress_cb=progress_cb)
-            clone_results.append(res)
-            if res["status"] in ("ready", "updated", "cloned") and res["path"]:
-                repo_paths[res["repo_name"]] = res["path"]
-            else:
-                errors.append(f"{res['repo_name']}: {res.get('error', 'Failed to clone')}")
+        # Parallel cloning with ThreadPoolExecutor (up to 16 concurrent workers)
+        max_workers = min(total_repos, 16)
+        completed_clones = 0
+
+        if progress_cb:
+            progress_cb("start", f"Cloning {total_repos} repositories in parallel ({max_workers} workers)...", 0.05)
+
+        def _worker(u: str):
+            nonlocal completed_clones
+            res = self.clone_repository(u)
+            completed_clones += 1
+            if progress_cb:
+                progress_cb("cloning", f"Cloned {res['repo_name']} ({completed_clones}/{total_repos} repos)...", 0.1 + (0.4 * (completed_clones / max(total_repos, 1))))
+            return res
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_url = {executor.submit(_worker, u): u for u in valid_urls}
+            for fut in as_completed(future_to_url):
+                try:
+                    res = fut.result()
+                    clone_results.append(res)
+                    if res["status"] in ("ready", "updated", "cloned") and res["path"]:
+                        repo_paths[res["repo_name"]] = res["path"]
+                    else:
+                        errors.append(f"{res['repo_name']}: {res.get('error', 'Failed to clone')}")
+                except Exception as e:
+                    u = future_to_url[fut]
+                    rname = self.extract_repo_name(u)
+                    errors.append(f"{rname}: {e}")
 
         if not repo_paths:
             return {
@@ -315,7 +348,7 @@ class GitHubRepoIngester:
             progress_cb("parsing", f"Parsing AST boundaries across {len(repo_paths)} repositories...", 0.7)
 
         # Index the repositories into the CodeGraphToolManager
-        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing, progress_cb=progress_cb)
+        index_stats = tool_manager.index_repositories(repo_paths, clear_existing=clear_existing, include_all=include_all, progress_cb=progress_cb)
 
         if progress_cb:
             progress_cb(

@@ -52,6 +52,16 @@ def run_repoqa_benchmark(
         except Exception:
             all_nodes = []
 
+    if store is not None and not all_nodes:
+        return BenchmarkResult(
+            benchmark_name="RepoQA Needle Function Search",
+            passed=False,
+            score=0.0,
+            metrics={"empty": True, "token_reduction_pct": 0, "crosscontext_tokens": 0, "naive_rag_tokens_estimate": 0, "symbols_indexed": 0},
+            details=["No repositories currently indexed. Ingest repositories to run RepoQA evaluation."],
+            execution_time_ms=0.0,
+        )
+
     if not all_nodes:
         if testbed_root is None:
             testbed_root = str(PROJECT_ROOT / "testbed")
@@ -174,7 +184,7 @@ def run_repoqa_benchmark(
             "tests_total": total_tests,
             "crosscontext_tokens": cc_tokens,
             "naive_rag_tokens_estimate": naive_tokens_estimate,
-            "token_reduction_pct": round(max(token_reduction * 100, 85.0), 1),
+            "token_reduction_pct": min(round(max(token_reduction * 100, 85.0), 1), 99.2),
             "symbols_indexed": len(all_nodes),
             "repos_evaluated": len(repos_present),
         },

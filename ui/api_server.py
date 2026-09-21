@@ -55,18 +55,18 @@ ingester = GitHubRepoIngester()
 diff_generator = CrossRepoDiffGenerator(agent.tool_manager)
 bedrock_client = BedrockClient()
 
-# Ensure default testbed is indexed on startup if empty
+# Retain clean database for new users - do not auto-seed demo testbed data
 def _bootstrap():
-    nodes = store.get_all_nodes()
-    if not nodes:
-        testbeds = {
-            "repo_auth_core": str(PROJECT_ROOT / "testbed" / "repo_auth_core"),
-            "repo_frontend_portal": str(PROJECT_ROOT / "testbed" / "repo_frontend_portal"),
-            "repo_shared_sdk": str(PROJECT_ROOT / "testbed" / "repo_shared_sdk"),
-        }
-        agent.tool_manager.index_repositories(testbeds, clear_existing=True)
+    pass
 
 _bootstrap()
+
+
+@app.post("/api/repos/clear")
+def clear_all_repositories():
+    """Wipes all indexed repositories, AST nodes, and edges to reset to clean new-user state."""
+    store.clear()
+    return {"status": "success", "message": "Knowledge graph successfully wiped."}
 
 
 # --- Pydantic Request Models ---
@@ -79,6 +79,7 @@ class AgentRunRequest(BaseModel):
 class IngestRequest(BaseModel):
     urls: List[str]
     clear_existing: bool = True
+    include_all: bool = True
 
 
 class DiscoverOrgRequest(BaseModel):
@@ -271,7 +272,7 @@ _ingest_state: Dict[str, Any] = {
 }
 
 
-def _run_ingest_sync(urls: List[str], clear_existing: bool):
+def _run_ingest_sync(urls: List[str], clear_existing: bool, include_all: bool = True):
     """Runs clone + index in a background thread. Updates _ingest_state as it progresses."""
     global _ingest_state
     _ingest_state["running"] = True
@@ -286,6 +287,7 @@ def _run_ingest_sync(urls: List[str], clear_existing: bool):
             urls,
             agent.tool_manager,
             clear_existing=clear_existing,
+            include_all=include_all,
             progress_cb=progress_cb,
         )
         _ingest_state["result"] = res
@@ -313,7 +315,7 @@ async def ingest_repositories(req: IngestRequest):
         }
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing)
+    loop.run_in_executor(None, _run_ingest_sync, req.urls, req.clear_existing, req.include_all)
 
     return {
         "status": "started",
@@ -421,6 +423,16 @@ def get_file_content(repo: str, file_path: str):
 @app.get("/api/benchmarks")
 def get_benchmarks():
     """Runs live evaluation suite (RepoQA & CodeScaleBench) and returns comparative metrics."""
+    all_nodes = store.get_all_nodes()
+    if not all_nodes:
+        return {
+            "empty": True,
+            "message": "No repositories currently indexed. Ingest a multi-repository codebase to generate comparative benchmarks.",
+            "repoqa": None,
+            "codescale": None,
+            "summary_table": [],
+        }
+
     res1 = run_repoqa_benchmark(store=store)
     res2 = run_codescale_benchmark(store=store)
 
@@ -456,9 +468,11 @@ DIST_PATH = PROJECT_ROOT / "ui_react" / "dist"
 if DIST_PATH.is_dir():
     app.mount("/assets", StaticFiles(directory=str(DIST_PATH / "assets")), name="assets")
 
+    HTML_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
     @app.get("/")
     async def serve_root():
-        return FileResponse(str(DIST_PATH / "index.html"))
+        return FileResponse(str(DIST_PATH / "index.html"), headers=HTML_HEADERS)
 
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
@@ -466,8 +480,10 @@ if DIST_PATH.is_dir():
             raise HTTPException(status_code=404, detail="API endpoint not found")
         file_path = DIST_PATH / full_path
         if file_path.is_file():
+            if "/assets/" in str(file_path):
+                return FileResponse(str(file_path), headers={"Cache-Control": "public, max-age=31536000, immutable"})
             return FileResponse(str(file_path))
-        return FileResponse(str(DIST_PATH / "index.html"))
+        return FileResponse(str(DIST_PATH / "index.html"), headers=HTML_HEADERS)
 
 
 if __name__ == "__main__":

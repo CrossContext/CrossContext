@@ -38,27 +38,33 @@ class TitanEmbeddingClient:
             else:
                 self._bedrock_available = None  # Reset circuit breaker
 
-        try:
-            client = self._get_client()
-            payload = {
-                "inputText": text[:8192],  # Titan v2 input limit
-                "dimensions": dimensions,
-                "normalize": True
-            }
-            response = client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(payload)
-            )
-            body = json.loads(response["body"].read())
-            self._bedrock_available = True
-            return body["embedding"]
-        except Exception:
-            # Trip circuit breaker on failure to prevent 3000+ sequential HTTP timeouts
-            self._bedrock_available = False
-            self._last_error_time = time.time()
-            return self._fallback_pseudo_embedding(text, dimensions)
+        for attempt in range(3):
+            try:
+                client = self._get_client()
+                payload = {
+                    "inputText": text[:8192],  # Titan v2 input limit
+                    "dimensions": dimensions,
+                    "normalize": True
+                }
+                response = client.invoke_model(
+                    modelId=self.model_id,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(payload)
+                )
+                body = json.loads(response["body"].read())
+                self._bedrock_available = True
+                return body["embedding"]
+            except Exception as e:
+                err_str = str(e).lower()
+                if "throttl" in err_str or "too many requests" in err_str or "rate limit" in err_str:
+                    time.sleep(0.15 * (2 ** attempt))
+                    continue
+                if attempt == 2:
+                    self._bedrock_available = False
+                    self._last_error_time = time.time()
+                    return self._fallback_pseudo_embedding(text, dimensions)
+        return self._fallback_pseudo_embedding(text, dimensions)
 
     @staticmethod
     def _fallback_pseudo_embedding(text: str, dimensions: int = 1024) -> List[float]:
@@ -133,7 +139,7 @@ class DualModeVectorStore:
         completed = 0
         if progress_cb:
             progress_cb("embedding", f"Generating Amazon Titan v2 embeddings (0/{total_targets})...", 0.9)
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=min(total_targets, 12)) as executor:
             futures = [executor.submit(_embed_node, n) for n in target_nodes]
             for future in as_completed(futures):
                 try:
@@ -208,25 +214,40 @@ class DualModeVectorStore:
         return self._search_local(query, repo=repo, limit=limit)
 
     def _search_local(self, query: str, repo: Optional[str] = None, limit: int = 5) -> List[CodeNode]:
-        """In-memory cosine similarity search."""
-        if not self._local_vectors:
+        """In-memory cosine similarity search with lexical blending."""
+        if not self._local_documents:
             return []
 
-        query_vec = self.embedding_client.generate_embedding(query)
         scored_nodes = []
+        query_terms = query.lower().split()
 
+        # 1. Cosine similarity over embedded nodes
+        if self._local_vectors:
+            query_vec = self.embedding_client.generate_embedding(query)
+            for node_id, node_vec in self._local_vectors.items():
+                doc = self._local_documents.get(node_id)
+                if not doc:
+                    continue
+                node: CodeNode = doc["node"]
+                if repo and node.repo != repo:
+                    continue
+
+                dot = sum(q * n for q, n in zip(query_vec, node_vec))
+                if any(term in doc["text"] for term in query_terms):
+                    dot += 0.3
+                scored_nodes.append((dot, node))
+
+        # 2. Lexical scoring fallback/augmentation for un-vectorized nodes
+        seen_ids = set(self._local_vectors.keys()) if self._local_vectors else set()
         for node_id, doc in self._local_documents.items():
+            if node_id in seen_ids:
+                continue
             node: CodeNode = doc["node"]
             if repo and node.repo != repo:
                 continue
-
-            node_vec = self._local_vectors[node_id]
-            # Cosine similarity
-            dot = sum(q * n for q, n in zip(query_vec, node_vec))
-            # Keyword bonus for exact substring matches
-            if any(term in doc["text"] for term in query.lower().split()):
-                dot += 0.3
-            scored_nodes.append((dot, node))
+            matches = sum(1 for term in query_terms if term in doc["text"])
+            if matches > 0:
+                scored_nodes.append((0.15 * matches, node))
 
         scored_nodes.sort(key=lambda x: x[0], reverse=True)
         return [node for _, node in scored_nodes[:limit]]
