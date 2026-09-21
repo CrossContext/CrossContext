@@ -86,14 +86,14 @@
 ### Part 6: Native MCP Server in Antigravity IDE (2:05 - 2:40)
 
 * **Spoken (Before Action)**:
-  > "Developers don't even have to leave their editor. CrossContext runs as a native Model Context Protocol (MCP) server directly inside Antigravity."
+  > "Developers do not even have to leave their editor. In a real-world workflow, a developer only has their single repository open locally. To prove CrossContext works dynamically without needing the entire multi-repo architecture cloned on my laptop, let's ask the AI agent in Antigravity to inspect the remote `ruxailab` organization."
 
 * **Action**:
   > Switch to the Antigravity chat window and enter:  
-  > `Using the CrossContext MCP server, trace the call graph for symbol calib_validation and find all cross-repository consumers across ruxailab.`
+  > `Using the CrossContext MCP server, ingest the public GitHub repositories from organization 'ruxailab' and trace the call graph for symbol calib_validation to identify all cross-repository consumers.`
 
 * **Spoken (After Action)**:
-  > "The MCP server executes `traverse_call_graph` and returns only the exact verified call chain. Instead of feeding entire repositories into the prompt, CrossContext extracts only the exact connected functions needed, cutting AI token usage by **over 95%**."
+  > "Notice that even though `web-eye-tracker-front` is not in my local workspace, CrossContext ingested the remote organization directly from GitHub and pinpointed that the Vue frontend at `src/store/calibration.js` calls our Python backend endpoint. It resolved this cross-language HTTP contract deterministically in milliseconds without hallucinating."
 
 ---
 
@@ -119,5 +119,5 @@ Analyze the blast radius if we modify the calibration validation endpoint in eye
 
 ### Antigravity MCP Prompt:
 ```text
-Using the CrossContext MCP server, trace the call graph for symbol calib_validation and find all cross-repository consumers across ruxailab.
+Using the CrossContext MCP server, ingest the public GitHub repositories from organization 'ruxailab' and trace the call graph for symbol calib_validation to identify all cross-repository consumers.
 ```
