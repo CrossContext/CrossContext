@@ -1,62 +1,62 @@
-# CrossContext - 3-Minute Live Demo Video Script
+# CrossContext - 3-Minute Pitch & Live Demo Script
 
 **Target Duration**: 3:00 (180 seconds)  
+**Tone**: High-energy, relatable, pitch-driven, clear, and non-academic  
 **Subject Repositories**: `ruxailab` ecosystem (`RUXAILAB`, `eye-tracker-api`, `web-eye-tracker-front`)  
-**Core Features Covered**: Dynamic Multi-Repo Ingestion, 2D AST Semantic Graph, Blast Radius Analysis, Architecture Blueprint, Live Benchmarks, Autonomous Multi-Repo Agent, and Native MCP Server in Antigravity.
+**Core Value Proposition**: Connects isolated repositories into a living dependency map, eliminating cross-repo breaking changes while saving over 95% in AI token costs.
 
 ---
 
-## Timing Breakdown
+## Pitch Timing Breakdown
 
-| Timestamp | Section | Visual Scene | Core Message / Goal |
+| Timestamp | Section | Visual Scene | Pitch Goal |
 |---|---|---|---|
-| **0:00 - 0:25** (25s) | **The Problem & Intro** | Intro slides / Clean UI in Light Mode | Modern microservices break silently at API boundaries; RAG fails across multi-repo codebases. |
-| **0:25 - 1:15** (50s) | **Live UI & Ingestion** | Ingestion modal -> 2D AST Graph -> Blueprint | Dynamic GitHub ingestion of `ruxailab` repos, instant cross-repo call graph, blast radius detection. |
-| **1:15 - 1:55** (40s) | **Autonomous Agent** | ContextBot chat panel & diff viewer | ContextBot detects cross-repo breaking changes and generates synchronized multi-repo diffs. |
-| **1:55 - 2:40** (45s) | **Antigravity MCP Demo** | Antigravity IDE chat window | Direct MCP tool invocation for AST traversal, symbol resolution, and blast radius calculation. |
-| **2:40 - 3:00** (20s) | **Impact & Conclusion** | Benchmarks tab -> Closing screen | Dramatic token reduction, 100% cross-repo recall, zero hallucinated paths. |
+| **0:00 - 0:25** (25s) | **The Relatable Hook** | Clean UI in Light Mode (`https://d2kn4upmh6y31q.cloudfront.net/`) | Hook the judges with a painful, everyday engineering problem: breaking downstream apps on API changes. |
+| **0:25 - 1:15** (50s) | **Live UI & Real-World Map** | Ingest `ruxailab` repos -> 2D Graph -> Architecture Blueprint | Show instant discovery, live cross-repo linking between Python API and Vue frontend, and blast radius. |
+| **1:15 - 1:50** (35s) | **Autonomous Agent** | ContextBot chat panel & synchronized diffs | Show AI diagnosing cross-repo breaking changes and generating synchronized fixes in one go. |
+| **1:50 - 2:35** (45s) | **Antigravity IDE & MCP Server** | Antigravity IDE chat window | Show direct MCP tool invocation in the editor, saving over 95% of prompt tokens. |
+| **2:35 - 3:00** (25s) | **Business Impact & Wrap-Up** | Benchmarks tab -> Closing pitch | Summarize cost savings, zero downtime, and massive developer productivity. |
 
 ---
 
-## Detailed Scene-by-Scene Script
+## Scene-by-Scene Pitch Script
 
-### Scene 1: The Problem & Introduction (0:00 - 0:25)
+### Scene 1: The Relatable Hook (0:00 - 0:25)
 **Screen**: Open browser at `https://d2kn4upmh6y31q.cloudfront.net/` in crisp Light Mode.  
-**Action**: Point out the clean workspace and top metrics bar.
+**Action**: Point to the clean workspace and top metrics bar.
 
 **Spoken Script**:
-> "Modern software engineering lives across multiple repositories, but AI coding assistants only see one file or one repo at a time. When an API contract changes in a backend service, client applications break silently. Naive RAG dumps massive amounts of irrelevant tokens and hallucinates dependencies.
+> "Have you ever made a small, innocent change to a backend API, merged your code, and accidentally took down the frontend without realizing it until production broke?
 > 
-> Meet **CrossContext**: a deterministic cross-repository code context engine powered by AST graphs, SCIP symbol linkers, AWS Bedrock, and an autonomous agent reasoning loop."
+> Almost every engineering team builds across multiple repositories. But today's AI coding tools are repository-blind: they only look at one repo at a time, dump thousands of irrelevant files into context, and guess how services connect.
+> 
+> That is why we built **CrossContext**: an intelligent engine that maps all your repositories together into a single living dependency web, so developers can refactor and ship across services with complete confidence."
 
 ---
 
-### Scene 2: Live Ingestion & 2D Semantic Graph (0:25 - 1:15)
+### Scene 2: Live Ingestion & The Living Code Map (0:25 - 1:15)
 **Screen**: Click **+ Ingest Repos** button. Enter `ruxailab` in the Organization field.  
 **Action**:
 1. Click **Discover Repositories** -> select `RUXAILAB`, `eye-tracker-api`, and `web-eye-tracker-front`.
-2. Click **Ingest Selected (3) Repositories** -> watch the parsing bar complete.
-3. Review the **Ingestion & Indexing Summary** modal showing indexed symbols and discovered cross-repo API contracts (`health_check`, `calib_validation`, `realtime_validation`). Click **Close & View Graph**.
-4. Show the **Interactive 2D Graph** rendered in swimlanes:
-   - Pan and zoom across `RUXAILAB`, `eye-tracker-api`, and `web-eye-tracker-front`.
-   - Click quick directive `health_check` or `calib_validation`.
-   - Toggle **API Directive** filters (`API`, `CLS`, `FN`).
-   - Click node `calib_validation` to highlight its blast radius and inbound callers.
-5. Click **Architecture Blueprint** tab -> show the Inter-Repository API Contract Matrix linking Vue components in `web-eye-tracker-front` directly to Python endpoints in `eye-tracker-api`.
-6. Click **Code Explorer** tab -> highlight cross-repo file trees.
+2. Click **Ingest Selected (3) Repositories** -> watch the parsing bar complete in real-time.
+3. On the **Ingestion Summary** modal, point out the discovered contracts (`health_check`, `calib_validation`, `realtime_validation`). Click **Close & View Graph**.
+4. Show the **Interactive 2D Graph**:
+   - Pan between the backend `eye-tracker-api` and the frontend `web-eye-tracker-front`.
+   - Click node `calib_validation` to highlight its blast radius and see connected lines light up.
+5. Click **Architecture Blueprint** tab -> show the Inter-Repository Contract Matrix linking Vue components directly to Python endpoints.
 
 **Spoken Script**:
-> "Let's ingest the `ruxailab` ecosystem. CrossContext discovers the public repositories and clones `RUXAILAB`, `eye-tracker-api`, and `web-eye-tracker-front`.
+> "Let's see this on a real-world multi-repo system from `ruxailab`: our backend `eye-tracker-api`, frontend `web-eye-tracker-front`, and the core `RUXAILAB` repo.
 > 
-> In seconds, tree-sitter parses the abstract syntax trees, extracts symbols, and reconstructs the cross-repository dependency web. On the 2D graph, backend endpoints link directly to frontend HTTP consumers.
+> In just seconds, CrossContext parses the codebases and reconstructs the real relationships between them.
 > 
-> In the Architecture Blueprint, we immediately see exact contracts: frontend components in `web-eye-tracker-front` consuming endpoints like `calib_validation` and `realtime_validation` in `eye-tracker-api`.
+> On this visual map, our Python backend endpoints connect directly to the Vue frontend components calling them. 
 > 
-> Clicking any symbol instantly calculates its blast radius across every connected repository, showing exactly which services will break if a signature changes."
+> If I click any endpoint, like calibration validation, CrossContext instantly shows me its **blast radius**: every single screen, function, and UI component that depends on it. If a backend engineer touches this signature, they immediately see every frontend component that could break."
 
 ---
 
-### Scene 3: Autonomous Multi-Repo Agent (1:15 - 1:55)
+### Scene 3: Autonomous Multi-Repo Agent (1:15 - 1:50)
 **Screen**: Switch back to **Agent Task & Graph** tab.  
 **Action**:
 1. In the ContextBot chat input, paste:
@@ -64,21 +64,21 @@
    Analyze the blast radius if we modify the calibration validation endpoint in eye-tracker-api
    ```
 2. Hit **Send** (or Enter).
-3. Watch ContextBot execute multi-turn reasoning steps (`reasoning_turn`, `traverse_call_graph`, `get_symbol_definition`).
-4. View the structured safety report and synthesized cross-repo patch summary.
+3. Show ContextBot executing reasoning steps (`reasoning_turn`, `traverse_call_graph`, `get_symbol_definition`).
+4. Highlight the structured safety report and synchronized cross-repo diffs.
 
 **Spoken Script**:
-> "Now let's ask ContextBot to analyze the blast radius if we update our calibration validation endpoint in `eye-tracker-api`.
+> "Now let's ask our AI agent, ContextBot: *'What is the blast radius if we modify the calibration validation endpoint in eye-tracker-api?'*
 > 
-> Rather than blindly searching text embeddings, ContextBot queries the deterministic AST graph. It traces callers from the backend controller into the frontend web client, verifies payload schemas, and synthesizes synchronized diffs across both repositories in a single pass."
+> Notice how ContextBot does not guess or hallucinate. It traces the live AST map, pinpoints the exact frontend files in `web-eye-tracker-front` calling that route, and provides synchronized code patches for both repositories at once. No more silent contract breakages."
 
 ---
 
-### Scene 4: Native MCP Server in Antigravity IDE (1:55 - 2:40)
+### Scene 4: Native MCP Server in Antigravity IDE (1:50 - 2:35)
 **Screen**: Switch to Antigravity IDE chat window.  
 **Action**: In the chat prompt, run the MCP tool commands.
 
-**Prompt 1 (Graph Diagnostics & Status)**:
+**Prompt 1 (Diagnostics & Status)**:
 ```text
 Check CrossContext graph diagnostics and show total indexed symbols and repositories.
 ```
@@ -90,27 +90,29 @@ Using the CrossContext MCP server, trace the call graph for symbol calib_validat
 ```
 *(Model invokes `traverse_call_graph` and `get_usage_dependency_links`, showing callers in `web-eye-tracker-front` consuming `eye-tracker-api`).*
 
-**Prompt 3 (Targeted Semantic Symbol Search)**:
+**Prompt 3 (Targeted Semantic Search)**:
 ```text
 Search for calibration symbols across the ruxailab repositories using CrossContext semantic code search.
 ```
 *(Model invokes `semantic_code_search` with exact AST line spans).*
 
 **Spoken Script**:
-> "CrossContext also runs as a native Model Context Protocol (MCP) server directly inside our IDE.
+> "Best of all, developers do not need to leave their editor. CrossContext runs as a native Model Context Protocol (MCP) server directly inside Antigravity.
 > 
-> In Antigravity, we can ask the assistant to query graph diagnostics, trace cross-repo call graphs, and retrieve exact AST chunks. Instead of feeding entire codebases into the model context window, the MCP server returns only the exact verified call chains needed to solve the task."
+> Right from the IDE chat, we can ask the assistant to query the graph and trace cross-repository call chains.
+> 
+> Instead of dumping entire codebases into the prompt, CrossContext extracts only the exact connected functions needed for the task. This cuts AI token usage by **over 95%**, making coding assistants dramatically faster, cheaper, and more accurate."
 
 ---
 
-### Scene 5: Benchmarks, Impact & Conclusion (2:40 - 3:00)
+### Scene 5: Business Impact & Conclusion (2:35 - 3:00)
 **Screen**: Switch back to browser, click **Benchmarks** tab.  
 **Action**: Point out the live comparative evaluation matrix comparing deterministic AST graphs against standard vector RAG.
 
 **Spoken Script**:
-> "On real-world benchmarks, CrossContext achieves massive token reductions compared to naive RAG, with complete cross-repository recall, sub-second latency, and zero hallucinated file paths.
+> "By turning multi-repo chaos into deterministic context, CrossContext eliminates production downtime from breaking API changes, saves **over 95% on AI token costs**, and gives engineering teams 100% cross-repository recall.
 > 
-> Built on AWS Strands, Bedrock, OpenSearch Serverless, and deterministic AST graphs, CrossContext bridges the multi-repository gap for modern software engineering. Thank you!"
+> Powered by AWS Bedrock, OpenSearch Serverless, and deterministic AST graphs, CrossContext brings true cross-repository intelligence to every developer. Thank you!"
 
 ---
 
