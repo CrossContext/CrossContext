@@ -21,14 +21,41 @@ class CodeGraphToolManager:
 
     def index_repositories(self, repo_paths: Dict[str, str], clear_existing: bool = False, include_all: bool = True, progress_cb: Optional[Any] = None) -> Dict[str, Any]:
         """
-        Ingests and indexes multiple repositories.
-        repo_paths: {"repo_auth_core": "path/to/repo_auth_core", ...}
+        Ingests and indexes multiple repositories. Supports local filesystem paths, GitHub URLs, or org/repo names.
+        repo_paths: {"eye-tracker-api": "https://github.com/ruxailab/eye-tracker-api.git", ...}
         """
+        import subprocess
+        from pathlib import Path
+        from mcp_server.ingestion.github_ingester import GitHubRepoIngester
+
+        resolved_paths: Dict[str, str] = {}
+        for repo_name, path_or_url in repo_paths.items():
+            p = Path(path_or_url)
+            if p.is_dir():
+                resolved_paths[repo_name] = str(p)
+            else:
+                # Dynamic fetch from GitHub
+                clean_name = GitHubRepoIngester.extract_repo_name(path_or_url if ("/" in path_or_url) else repo_name)
+                target_dir = Path("data/repos") / clean_name
+                if not target_dir.is_dir():
+                    if path_or_url.startswith("http") or "github.com" in path_or_url:
+                        clone_url = path_or_url
+                    elif "/" in path_or_url:
+                        clone_url = f"https://github.com/{path_or_url}.git"
+                    else:
+                        clone_url = f"https://github.com/ruxailab/{path_or_url}.git"
+                    target_dir.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        subprocess.run(["git", "clone", "--depth", "1", clone_url, str(target_dir)], check=True, capture_output=True)
+                    except Exception as e:
+                        print(f"Warning: Failed to clone {clone_url}: {e}")
+                resolved_paths[repo_name] = str(target_dir) if target_dir.is_dir() else path_or_url
+
         all_nodes: List[CodeNode] = []
         all_edges: List[CodeEdge] = []
 
-        total_repos = len(repo_paths)
-        for idx, (repo_name, path) in enumerate(repo_paths.items()):
+        total_repos = len(resolved_paths)
+        for idx, (repo_name, path) in enumerate(resolved_paths.items()):
             if progress_cb:
                 progress_cb("parsing", f"Parsing AST symbols in {repo_name} ({idx+1}/{total_repos})...", 0.5 + (0.2 * (idx / max(total_repos, 1))))
             nodes, edges = self.parser.parse_directory(repo_name, path, include_all=include_all, progress_cb=progress_cb)
