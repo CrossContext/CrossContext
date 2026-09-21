@@ -148,3 +148,50 @@ class CodeGraphToolManager:
             "graph_engine": graph_stats,
             "vector_engine": vector_stats
         }
+
+    def discover_github_organization(self, org_name: str) -> Dict[str, Any]:
+        """Discovers public repositories for any GitHub organization or profile URL."""
+        from mcp_server.ingestion.github_ingester import GitHubRepoIngester
+        urls = GitHubRepoIngester.fetch_organization_repos(org_name)
+        return {
+            "organization": org_name,
+            "count": len(urls),
+            "repositories": urls
+        }
+
+    def ingest_github_repositories(
+        self,
+        urls_or_org: str,
+        repos_filter: Optional[List[str]] = None,
+        clear_existing: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Dynamically fetches, clones, and indexes public GitHub repositories or an organization into the knowledge graph.
+        """
+        from mcp_server.ingestion.github_ingester import GitHubRepoIngester
+        ingester = GitHubRepoIngester(base_storage_dir="data/repos")
+
+        target_urls = []
+        if "github.com" in urls_or_org or urls_or_org.startswith("http"):
+            target_urls = [u.strip() for u in urls_or_org.split(",") if u.strip()]
+        else:
+            discovered = GitHubRepoIngester.fetch_organization_repos(urls_or_org)
+            if repos_filter:
+                filter_lower = [rf.lower().strip() for rf in repos_filter]
+                target_urls = [
+                    u for u in discovered
+                    if any(rf in u.lower() for rf in filter_lower)
+                ]
+            else:
+                target_urls = discovered
+
+        if not target_urls:
+            return {"status": "error", "message": f"No valid repository URLs found for '{urls_or_org}'"}
+
+        res = ingester.ingest_repositories(
+            target_urls,
+            self,
+            clear_existing=clear_existing,
+            include_all=True
+        )
+        return res

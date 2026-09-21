@@ -92,6 +92,32 @@ def index_local_repositories(repo_paths: Dict[str, str]) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def ingest_github_repositories(
+    urls_or_org: str,
+    repos_filter: Optional[list] = None,
+    clear_existing: bool = False
+) -> Dict[str, Any]:
+    """
+    Dynamically fetches, clones, and indexes public GitHub repositories or an entire organization from the internet into the CrossContext knowledge graph.
+    Args:
+        urls_or_org: GitHub organization name (e.g. 'ruxailab') or comma-separated GitHub URLs
+        repos_filter: Optional list of repository names to filter within an organization (e.g. ['RUXAILAB', 'eye-tracker-api', 'web-eye-tracker-front'])
+        clear_existing: Whether to wipe existing graph data first (default: False)
+    """
+    return manager.ingest_github_repositories(urls_or_org, repos_filter=repos_filter, clear_existing=clear_existing)
+
+
+@mcp.tool()
+def discover_github_organization(org_name: str) -> Dict[str, Any]:
+    """
+    Discovers all public repositories for any GitHub organization or user profile.
+    Args:
+        org_name: Organization or username (e.g. 'ruxailab', 'fastapi')
+    """
+    return manager.discover_github_organization(org_name)
+
+
+@mcp.tool()
 def get_graph_diagnostics() -> Dict[str, Any]:
     """Returns database and vector store diagnostics."""
     return manager.get_system_stats()
@@ -100,3 +126,4 @@ def get_graph_diagnostics() -> Dict[str, Any]:
 if __name__ == "__main__":
     # If run directly as a script, default to stdio transport for IDE/Agent integration
     mcp.run(transport="stdio")
+
